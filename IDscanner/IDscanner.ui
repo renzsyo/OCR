@@ -30,7 +30,7 @@
     <property name="geometry">
      <rect>
       <x>-10</x>
-      <y>-20</y>
+      <y>-10</y>
       <width>761</width>
       <height>611</height>
      </rect>
@@ -298,7 +298,7 @@
       <property name="geometry">
        <rect>
         <x>560</x>
-        <y>300</y>
+        <y>440</y>
         <width>141</width>
         <height>30</height>
        </rect>
@@ -320,56 +320,14 @@
        <string>1</string>
       </property>
      </widget>
-     <widget class="QLabel" name="fileNameLabel">
+     <widget class="QListWidget" name="fileListWidget">
       <property name="geometry">
        <rect>
-        <x>520</x>
+        <x>540</x>
         <y>140</y>
-        <width>61</width>
-        <height>16</height>
+        <width>191</width>
+        <height>271</height>
        </rect>
-      </property>
-      <property name="text">
-       <string>File Name</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="fileSizeLabel">
-      <property name="geometry">
-       <rect>
-        <x>590</x>
-        <y>140</y>
-        <width>49</width>
-        <height>16</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>File Size</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="fileStatusLabel">
-      <property name="geometry">
-       <rect>
-        <x>650</x>
-        <y>140</y>
-        <width>61</width>
-        <height>16</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>File Status</string>
-      </property>
-     </widget>
-     <widget class="QPushButton" name="deleteButton">
-      <property name="geometry">
-       <rect>
-        <x>720</x>
-        <y>140</y>
-        <width>21</width>
-        <height>24</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>X</string>
       </property>
      </widget>
     </widget>

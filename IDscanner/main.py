@@ -1,239 +1,438 @@
-import sys, cv2 ,os, requests
-from PyQt6.QtWidgets import QApplication, QMainWindow
+import sys, os, time, threading, cv2, requests, faulthandler
 from PyQt6 import uic
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QFileDialog,
+    QMenu,
+    QMessageBox,
+)
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QFileDialog
 
+faulthandler.enable()
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Load UI file (ensure IDscanner.ui exists and widget names match)
         uic.loadUi("IDscanner.ui", self)
 
-        # Force start page
-        self.Form1.setCurrentIndex(0)
+        # Start on first form/page
+        try:
+            self.Form1.setCurrentIndex(0)
+        except Exception:
+            # If your UI doesn't have Form1 or index 0, ignore here
+            pass
+
         # Camera setup
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        # Timer to update frames
+        # Timer for camera frames
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
 
-        # Connect button
-        self.continuep1.clicked.connect(self.go_next)
-        self.captureButtonp2.clicked.connect(self.capture_image)
-        self.recaptureButtonp2.clicked.connect(self.recapture_image)
+        # Data storage
+        self.uploaded_files = []  # list of dicts: {path, name, size, status}
+        self.current_index = -1
 
-        self.uploaded_files = []  # list to store uploaded file data
-        self.current_index = -1  # tracks which image is currently shown
-        self.deleteButton.clicked.connect(self.delete_current_file)
+        # Connect buttons (ensure these widget names exist in your UI)
+        try:
+            self.continuep1.clicked.connect(self.go_next)
+            self.captureButtonp2.clicked.connect(self.capture_image)
+            self.recaptureButtonp2.clicked.connect(self.recapture_image)
+            self.uploadButtonp3.clicked.connect(
+                lambda: self.upload_image(self.uploadedImageView)
+            )
+        except Exception:
+            pass
+
+        # List interactions
+        try:
+            # Use currentRowChanged so keyboard navigation also updates preview
+            self.fileListWidget.currentRowChanged.connect(self.on_current_row_changed)
+            # Also keep itemClicked for mouse clicks (optional)
+            self.fileListWidget.itemClicked.connect(self.list_item_clicked)
+
+            # Right click context menu
+            self.fileListWidget.setContextMenuPolicy(
+                Qt.ContextMenuPolicy.CustomContextMenu
+            )
+            self.fileListWidget.customContextMenuRequested.connect(self.show_list_menu)
+        except Exception:
+            pass
 
     def start_camera(self):
-        if not self.cap.isOpened():
-            self.cap.open(0)
-        self.timer.start(30)  # refresh every 30ms
+        if not self.cap or not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.timer.start(30)
 
     def stop_camera(self):
-        self.timer.stop()
-        self.cap.release()
+        try:
+            self.timer.stop()
+        except Exception:
+            pass
+        try:
+            if self.cap and self.cap.isOpened():
+                self.cap.release()
+        except Exception:
+            pass
 
     def update_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
+        # Safe camera read and QImage creation
+        if not self.cap or not self.cap.isOpened():
             return
+        ret, frame = self.cap.read()
+        if not ret or frame is None:
+            return
+        try:
+            # Keep a copy for capture
+            self.current_frame = frame.copy()
 
-        # Store latest frame (for capture)
-        self.current_frame = frame.copy()
-
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        h, w, ch = frame.shape
-        bytes_per_line = ch * w
-
-        qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimg)
-
-        scaled = pixmap.scaled(
-            self.cameraView.size(),
-            aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio
-        )
-
-        self.cameraView.setPixmap(scaled)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            if qimg.isNull():
+                return
+            pixmap = QPixmap.fromImage(qimg)
+            scaled = pixmap.scaled(
+                getattr(self, "cameraView").size()
+                if hasattr(self, "cameraView")
+                else pixmap.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            if hasattr(self, "cameraView"):
+                self.cameraView.setPixmap(scaled)
+        except Exception as e:
+            print("update_frame error:", e)
 
     def capture_image(self):
+        # Capture current frame and send to OCR in background
         if not hasattr(self, "current_frame"):
-            print("No frame available")
             return
 
-        self.timer.stop()
+        # Stop timer so preview shows captured frame
+        try:
+            self.timer.stop()
+        except Exception:
+            pass
+
         self.captured_frame = self.current_frame.copy()
 
-        save_path = "captured_id.jpg"
-        cv2.imwrite(save_path, self.captured_frame)
-
-        print(f"Image captured and saved to {save_path}")
-
-        # ---- Send to FastAPI ----
+        # Save with unique filename to avoid overwriting
+        save_path = f"captured_id_{int(time.time())}.jpg"
         try:
-            with open(save_path, "rb") as f:
-                files = {"file": f}
-                response = requests.post("http://127.0.0.1:5000/ocr", files=files)
-
-            if response.status_code == 200:
-                print("OCR Result:", response.json())
-            else:
-                print("Error:", response.text)
-
+            cv2.imwrite(save_path, self.captured_frame)
         except Exception as e:
-            print("Request failed:", e)
+            print("Failed to save captured image:", e)
+            return
 
-        # ---- Display frozen frame ----
-        frame = cv2.cvtColor(self.captured_frame, cv2.COLOR_BGR2RGB)
+        # Start background thread to send OCR request (non-blocking)
+        threading.Thread(target=self._send_ocr_request, args=(save_path,), daemon=True).start()
 
-        h, w, ch = frame.shape
-        bytes_per_line = ch * w
+        # Show captured image in cameraView
+        try:
+            rgb = cv2.cvtColor(self.captured_frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            if not qimg.isNull() and hasattr(self, "cameraView"):
+                pixmap = QPixmap.fromImage(qimg)
+                scaled = pixmap.scaled(
+                    self.cameraView.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.cameraView.setPixmap(scaled)
+        except Exception as e:
+            print("capture_image display error:", e)
 
-        qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimg)
-
-        scaled = pixmap.scaled(
-            self.cameraView.size(),
-            aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio
-        )
-
-        self.cameraView.setPixmap(scaled)
-
-        print("Image captured and preview frozen.")
-
+    def _send_ocr_request(self, image_path):
+        # Background worker: send file to OCR endpoint and print response
+        try:
+            with open(image_path, "rb") as f:
+                files = {"file": f}
+                resp = requests.post("http://127.0.0.1:5000/ocr", files=files, timeout=15)
+                try:
+                    # Try to parse JSON if available
+                    data = resp.json()
+                    print("OCR response (json):", data)
+                except Exception:
+                    print("OCR response (text):", resp.text)
+        except Exception as e:
+            print("OCR request failed:", e)
 
     def recapture_image(self):
         # Resume camera preview
-        self.timer.start(30)
+        self.start_camera()
 
-        print("Camera resumed for recapture.")
-
-    #Upload Img
     def upload_image(self, target_label):
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select ID Image",
+            "Select ID Images",
             "",
-            "Image Files (*.png *.jpg *.jpeg *.bmp)"
+            "Image Files (*.png *.jpg *.jpeg *.bmp)",
         )
 
-        if not file_path:
+        if not file_paths:
             return
 
         try:
-            file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
-            file_name = os.path.basename(file_path)
+            for file_path in file_paths:
+                if not os.path.exists(file_path):
+                    continue
+                file_size = os.path.getsize(file_path) / (1024 * 1024)
+                file_name = os.path.basename(file_path)
+                self.uploaded_files.append(
+                    {
+                        "path": file_path,
+                        "name": file_name,
+                        "size": f"{file_size:.2f} MB",
+                        "status": "Completed",
+                    }
+                )
 
-            file_info = {
-                "path": file_path,
-                "name": file_name,
-                "size": f"{file_size:.2f} MB",
-                "status": "Completed"
-            }
+            # Set current index to last uploaded file
+            if self.uploaded_files:
+                self.current_index = len(self.uploaded_files) - 1
 
-            self.uploaded_files.append(file_info)
-            self.current_index = len(self.uploaded_files) - 1
+            self.refresh_file_list()
 
-            self.display_file_details(target_label)
+            if self.current_index >= 0:
+                # display the last uploaded file
+                self.fileListWidget.setCurrentRow(self.current_index)
+                self.display_file_details(target_label)
 
         except Exception as e:
             print("Upload failed:", e)
+            QMessageBox.warning(self, "Upload Error", f"Upload failed: {e}")
 
-        #Display Img details
+    def refresh_file_list(self):
+        try:
+            self.fileListWidget.clear()
+            for file in self.uploaded_files:
+                self.fileListWidget.addItem(
+                    f"{file['name']} | {file['size']} | {file['status']}"
+                )
+            if 0 <= self.current_index < len(self.uploaded_files):
+                self.fileListWidget.setCurrentRow(self.current_index)
+            else:
+                # no valid selection
+                self.fileListWidget.setCurrentRow(-1)
+        except Exception as e:
+            print("refresh_file_list error:", e)
+
+    def list_item_clicked(self, item):
+        # Mouse click handler
+        row = self.fileListWidget.row(item)
+        if 0 <= row < len(self.uploaded_files):
+            self.current_index = row
+            self.display_file_details(self.uploadedImageView)
+
+    def on_current_row_changed(self, row):
+        # Keyboard or programmatic selection change
+        if 0 <= row < len(self.uploaded_files):
+            self.current_index = row
+            self.display_file_details(self.uploadedImageView)
+        else:
+            # clear preview if selection invalid
+            self.current_index = -1
+            self.uploadedImageView.clear()
+            try:
+                self.fileNameLabel.clear()
+                self.fileSizeLabel.clear()
+                self.fileStatusLabel.clear()
+            except Exception:
+                pass
+
+    def show_list_menu(self, position):
+        # position is widget-local coordinates
+        item = self.fileListWidget.itemAt(position)
+        menu = QMenu(self)
+
+        if item is None:
+            # Clicked empty area: optionally show actions like "Add files"
+            add_action = menu.addAction("Add files")
+            action = menu.exec(self.fileListWidget.mapToGlobal(position))
+            if action == add_action:
+                self.upload_image(self.uploadedImageView)
+            return
+
+        # If an item exists under cursor, select it and show delete
+        row = self.fileListWidget.row(item)
+        if row < 0 or row >= len(self.uploaded_files):
+            return
+
+        # Select the item under cursor so delete uses correct index
+        self.fileListWidget.setCurrentRow(row)
+        self.current_index = row
+
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(self.fileListWidget.mapToGlobal(position))
+        if action == delete_action:
+            self.delete_selected_file()
+
+    def delete_selected_file(self):
+        row = self.fileListWidget.currentRow()
+        if row < 0 or row >= len(self.uploaded_files):
+            return
+
+        try:
+            # Remove the file entry
+            removed = self.uploaded_files.pop(row)
+            print("Removed:", removed["name"])
+        except Exception as e:
+            print("delete_selected_file error:", e)
+            return
+
+        # Compute new current_index safely
+        if len(self.uploaded_files) == 0:
+            self.current_index = -1
+        else:
+            self.current_index = min(row, len(self.uploaded_files) - 1)
+
+        self.refresh_file_list()
+
+        if self.current_index >= 0:
+            self.fileListWidget.setCurrentRow(self.current_index)
+            self.display_file_details(self.uploadedImageView)
+        else:
+            try:
+                self.uploadedImageView.clear()
+                self.fileNameLabel.clear()
+                self.fileSizeLabel.clear()
+                self.fileStatusLabel.clear()
+            except Exception:
+                pass
+
     def display_file_details(self, target_label):
+        # Validate index
         if self.current_index < 0 or self.current_index >= len(self.uploaded_files):
+            # Clear UI to avoid stale content
+            try:
+                target_label.clear()
+                self.fileNameLabel.clear()
+                self.fileSizeLabel.clear()
+                self.fileStatusLabel.clear()
+            except Exception:
+                pass
             return
 
         file_info = self.uploaded_files[self.current_index]
-
-        frame = cv2.imread(file_info["path"])
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        h, w, ch = frame.shape
-        bytes_per_line = ch * w
-
-        qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimg)
-
-        scaled = pixmap.scaled(
-            target_label.size(),
-            aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio
-        )
-
-        target_label.setPixmap(scaled)
-
-        # 👇 Update UI labels
-        self.fileNameLabel.setText(file_info["name"])
-        self.fileSizeLabel.setText(file_info["size"])
-        self.fileStatusLabel.setText(file_info["status"])
-        self.deleteButton.clicked.connect(self.delete_current_file)
-
-    def delete_current_file(self):
-            if not self.uploaded_files:
-                return
-
-            self.uploaded_files.pop(self.current_index)
-
-            if self.uploaded_files:
-                self.current_index = max(0, self.current_index - 1)
-                self.display_uploaded_file(self.uploadedImageView)
-            else:
-                self.current_index = -1
-                self.uploadedImageView.clear()
-                self.fileNameLabel.setText("")
-                self.fileSizeLabel.setText("")
-                self.fileStatusLabel.setText("")
-        # Optional: show on label or message
-    def go_next(self):
-        selected_id = self.idOption.currentText()
-
-        if not (self.uploadOption.isChecked() or self.cameraOption.isChecked()):
-            print("Select camera or upload")
+        path = file_info.get("path")
+        if not path or not os.path.exists(path):
+            print("display_file_details: missing file", path)
+            try:
+                target_label.clear()
+                self.fileNameLabel.clear()
+                self.fileSizeLabel.clear()
+                self.fileStatusLabel.clear()
+            except Exception:
+                pass
             return
 
-        # Passport
+        frame = cv2.imread(path)
+        if frame is None:
+            print("display_file_details: cv2.imread returned None for", path)
+            try:
+                target_label.clear()
+                self.fileNameLabel.clear()
+                self.fileSizeLabel.clear()
+                self.fileStatusLabel.clear()
+            except Exception:
+                pass
+            return
+
+        try:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            if qimg.isNull():
+                print("display_file_details: QImage is null for", path)
+                target_label.clear()
+                return
+            pixmap = QPixmap.fromImage(qimg)
+            scaled = pixmap.scaled(
+                target_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            target_label.setPixmap(scaled)
+
+            try:
+                self.fileNameLabel.setText(file_info["name"])
+                self.fileSizeLabel.setText(file_info["size"])
+                self.fileStatusLabel.setText(file_info["status"])
+            except Exception:
+                pass
+        except Exception as e:
+            print("display_file_details error:", e)
+            try:
+                target_label.clear()
+            except Exception:
+                pass
+
+    def go_next(self):
+        try:
+            selected_id = self.idOption.currentText()
+        except Exception:
+            selected_id = None
+
+        if not (getattr(self, "uploadOption", None) and getattr(self, "cameraOption", None)):
+            # If these widgets don't exist, just return
+            return
+
+        if not (self.uploadOption.isChecked() or self.cameraOption.isChecked()):
+            QMessageBox.information(self, "Selection", "Select camera or upload")
+            return
+
         if selected_id == "Passport":
             if self.cameraOption.isChecked():
-                self.Form1.setCurrentIndex(1)
+                try:
+                    self.Form1.setCurrentIndex(1)
+                except Exception:
+                    pass
                 self.start_camera()
             elif self.uploadOption.isChecked():
                 self.stop_camera()
-                self.Form1.setCurrentIndex(2)
+                try:
+                    self.Form1.setCurrentIndex(2)
+                except Exception:
+                    pass
                 self.upload_image(self.uploadedImageView)
 
-        # National ID
-        elif selected_id == "National ID":
+        elif selected_id in ["National ID", "Driver's License"]:
             if self.cameraOption.isChecked():
-                self.Form1.setCurrentIndex(4)
+                try:
+                    self.Form1.setCurrentIndex(4)
+                except Exception:
+                    pass
                 self.start_camera()
             elif self.uploadOption.isChecked():
                 self.stop_camera()
-                self.Form1.setCurrentIndex(5)
-
-        # Driver's License
-        elif selected_id == "Driver's License":
-            if self.cameraOption.isChecked():
-                self.Form1.setCurrentIndex(4)
-                self.start_camera()
-            elif self.uploadOption.isChecked():
-                self.stop_camera()
-                self.Form1.setCurrentIndex(5)
+                try:
+                    self.Form1.setCurrentIndex(5)
+                except Exception:
+                    pass
 
     def closeEvent(self, event):
-        # Stop camera when app closes
         self.stop_camera()
         super().closeEvent(event)
 
 
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-sys.exit(app.exec())
+def main():
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

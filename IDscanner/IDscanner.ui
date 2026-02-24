@@ -128,6 +128,9 @@
         <pointsize>12</pointsize>
        </font>
       </property>
+      <property name="editable">
+       <bool>false</bool>
+      </property>
       <item>
        <property name="text">
         <string>Government ID</string>
@@ -182,7 +185,7 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_4">
+    <widget class="QWidget" name="page_2">
      <widget class="QLabel" name="label_5">
       <property name="geometry">
        <rect>
@@ -241,7 +244,7 @@
        <string>Capture Image</string>
       </property>
      </widget>
-     <widget class="QPushButton" name="recaptureButton">
+     <widget class="QPushButton" name="recaptureButtonp2">
       <property name="geometry">
        <rect>
         <x>570</x>
@@ -271,22 +274,41 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_5">
+    <widget class="QWidget" name="page_3">
      <widget class="QLabel" name="label_6">
       <property name="geometry">
        <rect>
-        <x>200</x>
+        <x>560</x>
+        <y>80</y>
+        <width>141</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>15</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Upload Image </string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uploadButtonp3">
+      <property name="geometry">
+       <rect>
+        <x>570</x>
         <y>280</y>
-        <width>49</width>
-        <height>16</height>
+        <width>110</width>
+        <height>30</height>
        </rect>
       </property>
       <property name="text">
-       <string>page 3</string>
+       <string>Upload Image</string>
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_6">
+    <widget class="QWidget" name="page_4">
      <widget class="QLabel" name="label_7">
       <property name="geometry">
        <rect>
@@ -301,7 +323,7 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_7">
+    <widget class="QWidget" name="page_5">
      <widget class="QLabel" name="label_8">
       <property name="geometry">
        <rect>
@@ -316,7 +338,7 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_2">
+    <widget class="QWidget" name="page_6">
      <widget class="QLabel" name="label_9">
       <property name="geometry">
        <rect>
@@ -331,7 +353,7 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_3">
+    <widget class="QWidget" name="page_7">
      <widget class="QLabel" name="label_10">
       <property name="geometry">
        <rect>

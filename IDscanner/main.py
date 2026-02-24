@@ -1,4 +1,4 @@
-import sys, cv2 ,os
+import sys, cv2 ,os, requests
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6 import uic
 from PyQt6.QtCore import QTimer, Qt
@@ -69,19 +69,29 @@ class MainWindow(QMainWindow):
             print("No frame available")
             return
 
-        # Stop camera preview (freeze)
         self.timer.stop()
-
-        # Store captured frame
         self.captured_frame = self.current_frame.copy()
 
-        # Save image (overwrite old one)
         save_path = "captured_id.jpg"
         cv2.imwrite(save_path, self.captured_frame)
 
         print(f"Image captured and saved to {save_path}")
 
-        # Convert to displayable image
+        # ---- Send to FastAPI ----
+        try:
+            with open(save_path, "rb") as f:
+                files = {"file": f}
+                response = requests.post("http://127.0.0.1:5000/ocr", files=files)
+
+            if response.status_code == 200:
+                print("OCR Result:", response.json())
+            else:
+                print("Error:", response.text)
+
+        except Exception as e:
+            print("Request failed:", e)
+
+        # ---- Display frozen frame ----
         frame = cv2.cvtColor(self.captured_frame, cv2.COLOR_BGR2RGB)
 
         h, w, ch = frame.shape
@@ -95,10 +105,10 @@ class MainWindow(QMainWindow):
             aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio
         )
 
-        # Show frozen frame
         self.cameraView.setPixmap(scaled)
 
         print("Image captured and preview frozen.")
+
 
     def recapture_image(self):
         # Resume camera preview

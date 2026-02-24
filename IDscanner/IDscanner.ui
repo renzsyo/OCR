@@ -30,13 +30,13 @@
     <property name="geometry">
      <rect>
       <x>-10</x>
-      <y>-10</y>
+      <y>-20</y>
       <width>761</width>
       <height>611</height>
      </rect>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>2</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QLabel" name="label">
@@ -279,7 +279,7 @@
       <property name="geometry">
        <rect>
         <x>560</x>
-        <y>80</y>
+        <y>70</y>
         <width>141</width>
         <height>41</height>
        </rect>
@@ -297,14 +297,79 @@
      <widget class="QPushButton" name="uploadButtonp3">
       <property name="geometry">
        <rect>
-        <x>570</x>
-        <y>280</y>
-        <width>110</width>
+        <x>560</x>
+        <y>300</y>
+        <width>141</width>
         <height>30</height>
        </rect>
       </property>
       <property name="text">
-       <string>Upload Image</string>
+       <string>Upload Another Image</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="uploadedImageView">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>90</y>
+        <width>481</width>
+        <height>381</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>1</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="fileNameLabel">
+      <property name="geometry">
+       <rect>
+        <x>520</x>
+        <y>140</y>
+        <width>61</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>File Name</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="fileSizeLabel">
+      <property name="geometry">
+       <rect>
+        <x>590</x>
+        <y>140</y>
+        <width>49</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>File Size</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="fileStatusLabel">
+      <property name="geometry">
+       <rect>
+        <x>650</x>
+        <y>140</y>
+        <width>61</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>File Status</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="deleteButton">
+      <property name="geometry">
+       <rect>
+        <x>720</x>
+        <y>140</y>
+        <width>21</width>
+        <height>24</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>X</string>
       </property>
      </widget>
     </widget>

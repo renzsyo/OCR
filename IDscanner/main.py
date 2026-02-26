@@ -16,10 +16,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Load UI file (ensure IDscanner.ui exists and widget names match)
         uic.loadUi("IDscanner.ui", self)
 
-        # Start on first form/page
         try:
             self.Form1.setCurrentIndex(0)
         except Exception:
@@ -39,9 +37,10 @@ class MainWindow(QMainWindow):
         self.uploaded_files = []  # list of dicts: {path, name, size, status}
         self.current_index = -1
 
-        # Connect buttons (ensure these widget names exist in your UI)
         try:
             self.continuep1.clicked.connect(self.go_next)
+            self.continuep2.clicked.connect(self.go_next)
+            self.continuep3.clicked.connect(self.go_next)
             self.captureButtonp2.clicked.connect(self.capture_image)
             self.recaptureButtonp2.clicked.connect(self.recapture_image)
             self.uploadButtonp3.clicked.connect(
@@ -64,6 +63,13 @@ class MainWindow(QMainWindow):
             self.fileListWidget.customContextMenuRequested.connect(self.show_list_menu)
         except Exception:
             pass
+
+        self.page_flow = {
+            1: 3,
+            2: 3,
+            4: 6,
+            5: 6,
+        }
 
     def start_camera(self):
         if not self.cap or not self.cap.isOpened():
@@ -380,14 +386,26 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    #Navigation Between Pages
     def go_next(self):
+        current = self.Form1.currentIndex()
+
+        if current in self.page_flow:
+            if current == 1 and not hasattr(self, "captured_frame"):
+                QMessageBox.warning(self, "No Capture", "Please capture an image first")
+                return
+            if current == 2 and not self.uploaded_files:
+                QMessageBox.warning(self, "No file", "Please upload an file first")
+                return
+
+            self.Form1.setCurrentIndex(self.page_flow[current])
+            return
         try:
             selected_id = self.idOption.currentText()
         except Exception:
             selected_id = None
 
         if not (getattr(self, "uploadOption", None) and getattr(self, "cameraOption", None)):
-            # If these widgets don't exist, just return
             return
 
         if not (self.uploadOption.isChecked() or self.cameraOption.isChecked()):
@@ -396,17 +414,11 @@ class MainWindow(QMainWindow):
 
         if selected_id == "Passport":
             if self.cameraOption.isChecked():
-                try:
-                    self.Form1.setCurrentIndex(1)
-                except Exception:
-                    pass
+                self.Form1.setCurrentIndex(1)
                 self.start_camera()
             elif self.uploadOption.isChecked():
                 self.stop_camera()
-                try:
-                    self.Form1.setCurrentIndex(2)
-                except Exception:
-                    pass
+                self.Form1.setCurrentIndex(2)
                 self.upload_image(self.uploadedImageView)
 
         elif selected_id in ["National ID", "Driver's License"]:
@@ -426,7 +438,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.stop_camera()
         super().closeEvent(event)
-
 
 def main():
     app = QApplication(sys.argv)

@@ -41,8 +41,10 @@ class MainWindow(QMainWindow):
             self.continuep1.clicked.connect(self.go_next)
             self.continuep2.clicked.connect(self.go_next)
             self.continuep3.clicked.connect(self.go_next)
+            self.continuep4.clicked.connect(self.go_next)
             self.captureButtonp2.clicked.connect(self.capture_image)
             self.recaptureButtonp2.clicked.connect(self.recapture_image)
+            self.downloadTxtButton.clicked.connect(self.download_text)
             self.uploadButtonp3.clicked.connect(
                 lambda: self.upload_image(self.uploadedImageView)
             )
@@ -69,6 +71,8 @@ class MainWindow(QMainWindow):
             2: 3,
             4: 6,
             5: 6,
+            3: 0,
+            6: 0,
         }
 
     def start_camera(self):
@@ -385,6 +389,56 @@ class MainWindow(QMainWindow):
                 target_label.clear()
             except Exception:
                 pass
+    def download_text(self):
+        text = self.extractedTextBox.toPlainText()
+        if not text.strip():
+            QMessageBox.warning(self, "No text", "There is no text to save.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Extracted Text",
+            "extracted_text.txt",
+            "Text Files (*.txt)",
+        )
+        if not file_path:
+            return
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            QMessageBox.information(self, "Saved", "Text Saved to Device")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not save text file: {e}")
+
+    def show_review_page(self):
+        if hasattr(self, "captured_frame"):
+            rgb = cv2.cvtColor(self.captured_frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            scaled = pixmap.scaled(
+                self.pictureView1.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.pictureView1.setPixmap(scaled)
+
+        elif self.uploaded_files:
+            path = self.uploaded_files[-1]["path"]
+            frame = cv2.imread(path)
+            if frame is not None:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb.shape
+                bytes_per_line = ch * w
+                qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                pixmap = QPixmap.fromImage(qimg)
+                scaled = pixmap.scaled(
+                    self.pictureView1.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.pictureView1.setPixmap(scaled)
 
     #Navigation Between Pages
     def go_next(self):
@@ -399,6 +453,22 @@ class MainWindow(QMainWindow):
                 return
 
             self.Form1.setCurrentIndex(self.page_flow[current])
+
+            if self.page_flow[current] == 0:
+                if hasattr(self, "captured_frame"):
+                    del self.captured_frame
+                self.uploaded_files.clear
+                self.current_index = -1
+                try:
+                    self.pictureView1.clear()
+                    self.extractedTextBox.clear()
+                except Exception:
+                    pass
+
+            if self.page_flow[current] == 3:
+                self.stop_camera()
+                self.show_review_page()
+                self.extractedTextBox.setPlainText("Sample extracted text will appear here.")
             return
         try:
             selected_id = self.idOption.currentText()

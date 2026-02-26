@@ -36,7 +36,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>4</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QLabel" name="label">
@@ -278,9 +278,9 @@
      <widget class="QLabel" name="label_6">
       <property name="geometry">
        <rect>
-        <x>560</x>
+        <x>570</x>
         <y>70</y>
-        <width>141</width>
+        <width>131</width>
         <height>41</height>
        </rect>
       </property>
@@ -345,17 +345,72 @@
      </widget>
     </widget>
     <widget class="QWidget" name="page_4">
-     <widget class="QLabel" name="label_7">
+     <widget class="QLabel" name="label_12">
+      <property name="geometry">
+       <rect>
+        <x>560</x>
+        <y>60</y>
+        <width>141</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>15</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Extracted Text</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="continuep4">
       <property name="geometry">
        <rect>
         <x>310</x>
-        <y>200</y>
-        <width>49</width>
-        <height>16</height>
+        <y>510</y>
+        <width>171</width>
+        <height>61</height>
        </rect>
       </property>
       <property name="text">
-       <string>Page 4</string>
+       <string>Scan Another Image/File</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="pictureView1">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>60</y>
+        <width>481</width>
+        <height>381</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>1</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="downloadTxtButton">
+      <property name="geometry">
+       <rect>
+        <x>570</x>
+        <y>440</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Download as File</string>
+      </property>
+     </widget>
+     <widget class="QTextEdit" name="extractedTextBox">
+      <property name="geometry">
+       <rect>
+        <x>540</x>
+        <y>130</y>
+        <width>191</width>
+        <height>291</height>
+       </rect>
       </property>
      </widget>
     </widget>
@@ -363,10 +418,10 @@
      <widget class="QLabel" name="label_8">
       <property name="geometry">
        <rect>
-        <x>320</x>
-        <y>230</y>
-        <width>49</width>
-        <height>16</height>
+        <x>220</x>
+        <y>200</y>
+        <width>171</width>
+        <height>231</height>
        </rect>
       </property>
       <property name="text">

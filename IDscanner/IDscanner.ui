@@ -36,7 +36,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>4</number>
+     <number>3</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QLabel" name="label">
@@ -348,10 +348,10 @@
      <widget class="QLabel" name="label_12">
       <property name="geometry">
        <rect>
-        <x>560</x>
-        <y>60</y>
+        <x>310</x>
+        <y>10</y>
         <width>141</width>
-        <height>41</height>
+        <height>51</height>
        </rect>
       </property>
       <property name="font">
@@ -367,8 +367,8 @@
      <widget class="QPushButton" name="continuep4">
       <property name="geometry">
        <rect>
-        <x>310</x>
-        <y>510</y>
+        <x>290</x>
+        <y>520</y>
         <width>171</width>
         <height>61</height>
        </rect>
@@ -377,40 +377,17 @@
        <string>Scan Another Image/File</string>
       </property>
      </widget>
-     <widget class="QLabel" name="pictureView1">
+     <widget class="QTabWidget" name="reviewTabWidget">
       <property name="geometry">
        <rect>
-        <x>20</x>
+        <x>10</x>
         <y>60</y>
-        <width>481</width>
-        <height>381</height>
+        <width>751</width>
+        <height>451</height>
        </rect>
       </property>
-      <property name="text">
-       <string>1</string>
-      </property>
-     </widget>
-     <widget class="QPushButton" name="downloadTxtButton">
-      <property name="geometry">
-       <rect>
-        <x>570</x>
-        <y>440</y>
-        <width>121</width>
-        <height>41</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Download as File</string>
-      </property>
-     </widget>
-     <widget class="QTextEdit" name="extractedTextBox">
-      <property name="geometry">
-       <rect>
-        <x>540</x>
-        <y>130</y>
-        <width>191</width>
-        <height>291</height>
-       </rect>
+      <property name="currentIndex">
+       <number>-1</number>
       </property>
      </widget>
     </widget>

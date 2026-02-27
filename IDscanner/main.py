@@ -32,7 +32,8 @@ class MainWindow(QMainWindow):
         # Timer for camera frames
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-
+        self.pendingResponse = None
+        self.reviewTextBox = None
         # Data storage
         self.uploaded_files = []  # list of dicts: {path, name, size, status}
         self.current_index = -1
@@ -40,7 +41,7 @@ class MainWindow(QMainWindow):
         try:
             self.continuep1.clicked.connect(self.go_next)
             self.continuep2.clicked.connect(self.go_next)
-            self.continuep3.clicked.connect(self.go_next)
+            self.continuep3.clicked.connect(self.infer_and_continue)
             self.continuep4.clicked.connect(self.go_next)
             self.captureButtonp2.clicked.connect(self.capture_image)
             self.recaptureButtonp2.clicked.connect(self.recapture_image)
@@ -68,8 +69,8 @@ class MainWindow(QMainWindow):
         self.page_flow = {
             1: 3,
             2: 3,
-            4: 6,
-            5: 6,
+            4: 3,
+            5: 3,
             3: 0,
             6: 0,
         }
@@ -163,20 +164,103 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print("capture_image display error:", e)
 
+    def infer_and_continue(self):
+        """
+        Called when continuep3 is clicked.
+        1) Send inference request (upload page)
+        2) Then go to next page
+        """
+        # Ensure there is at least one uploaded file
+        if not self.uploaded_files:
+            QMessageBox.warning(self, "No file", "Please upload an image first.")
+            return
+
+        # Use current selection or last file
+        if self.current_index < 0:
+            self.current_index = len(self.uploaded_files) - 1
+
+        if self.current_index < 0:
+            QMessageBox.warning(self, "No file", "Please upload an image first.")
+            return
+
+        file_info = self.uploaded_files[self.current_index]
+        path = file_info.get("path")
+
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Error", "Selected file not found.")
+            return
+
+        # Debug
+        print(f"[DEBUG] Sending inference for: {path}")
+
+        # Start inference in background (non-blocking)
+        threading.Thread(target=self._send_ocr_request, args=(path,), daemon=True).start()
+
+        # After triggering inference, go to next page
+        self.go_next()
+
     def _send_ocr_request(self, image_path):
-        # Background worker: send file to OCR endpoint and print response
         try:
+            # Determine route (same as before)
+            selected_id = self.idOption.currentText()
+            print(f"[DEBUG] Selected ID option: '{selected_id}'")
+
+            if selected_id == "Passport":
+                route = "http://127.0.0.1:5000/pP"
+            elif selected_id == "National ID":
+                route = "http://127.0.0.1:5000/nID"
+            elif selected_id == "Driver's License":
+                route = "http://127.0.0.1:5000/dL"
+            else:
+                print("[DEBUG] Unknown ID option")
+                return
+
+            print(f"[DEBUG] Using route: {route}")
+
             with open(image_path, "rb") as f:
                 files = {"file": f}
-                resp = requests.post("http://127.0.0.1:5000/ocr", files=files, timeout=15)
-                try:
-                    # Try to parse JSON if available
-                    data = resp.json()
-                    print("OCR response (json):", data)
-                except Exception:
-                    print("OCR response (text):", resp.text)
+                resp = requests.post(route, files=files, timeout=15)
+
+            print(f"[DEBUG] HTTP Status: {resp.status_code}")
+
+            try:
+                data = resp.json()
+            except Exception:
+                data = {"response": resp.text}
+
+            print("[DEBUG] Server response:", data)
+
+            # Update UI from main thread (safe)
+            QTimer.singleShot(0, lambda: print("[DEBUG] UI update triggered"))
+            print("[DEBUG] Setting pendingResponse")
+            textbox = self.findChild(QTextEdit, "extractedTextBox")
+            if textbox:
+                formatted_text = self.format_mrz_response(data)
+                textbox.setPlainText(formatted_text)
+                print("[DEBUG] Textbox updated successfully")
+            else:
+                print("[DEBUG] extractedTextBox not found in UI")
+            print("[DEBUG] pendingResponse set:", self.pendingResponse)
+
         except Exception as e:
-            print("OCR request failed:", e)
+            print("[DEBUG] OCR request failed:", e)
+
+    def show_response_in_listwidget(self, data):
+        currentTab = self.reviewTabWidget.currentWidget()
+
+        if not hasattr(currentTab, "extractedTextBox"):
+            print("[DEBUG] extractedTextBox not found on current tab")
+            return
+
+        box = currentTab.extractedTextBox
+
+        if isinstance(data, dict):
+            text = "\n".join(f"{k}: {v}" for k, v in data.items())
+        else:
+            text = str(data)
+
+        box.setPlainText(text)
+        print("[DEBUG] Response written to extractedTextBox")
 
     def recapture_image(self):
         # Resume camera preview
@@ -436,12 +520,26 @@ class MainWindow(QMainWindow):
             # Right side layout (text + button stacked vertically)
             right_layout = QVBoxLayout()
 
-            # Extracted text box (read-only)
             extractedTextBox = QTextEdit()
             extractedTextBox.setFixedSize(191, 271)
             extractedTextBox.setReadOnly(True)
-            extractedTextBox.setPlainText("Sample extracted text will appear here.")
+            print("[DEBUG] extractedTextBox created for tab")
+            # Store reference on tab
+            tab.extractedTextBox = extractedTextBox
 
+            # If pending response exists, display it
+            if hasattr(self, "pendingResponse") and self.pendingResponse is not None:
+                if isinstance(self.pendingResponse, dict):
+                    text = "\n".join(f"{k}: {v}" for k, v in self.pendingResponse.items())
+                else:
+                    text = str(self.pendingResponse)
+
+                extractedTextBox.setPlainText(text)
+
+                # Clear pending (so it doesn't repeat)
+                self.pendingResponse = None
+            else:
+                extractedTextBox.setPlainText("Sample extracted text will appear here.")
             # Download button (centered)
             downloadBtn = QPushButton("Download as File")
             downloadBtn.setFixedSize(121, 41)
@@ -483,7 +581,23 @@ class MainWindow(QMainWindow):
             extractedTextBox = QTextEdit()
             extractedTextBox.setFixedSize(191, 271)
             extractedTextBox.setReadOnly(True)
-            extractedTextBox.setPlainText("Sample extracted text will appear here.")
+            print("[DEBUG] extractedTextBox created for tab2")
+            # Store reference on tab
+            tab.extractedTextBox = extractedTextBox
+
+            # If pending response exists, display it
+            if hasattr(self, "pendingResponse") and self.pendingResponse is not None:
+                if isinstance(self.pendingResponse, dict):
+                    text = "\n".join(f"{k}: {v}" for k, v in self.pendingResponse.items())
+                else:
+                    text = str(self.pendingResponse)
+
+                extractedTextBox.setPlainText(text)
+
+                # Clear pending (so it doesn't repeat)
+                self.pendingResponse = None
+            else:
+                extractedTextBox.setPlainText("Sample extracted text will appear here.")
 
             downloadBtn = QPushButton("Download as File")
             downloadBtn.setFixedSize(121, 41)

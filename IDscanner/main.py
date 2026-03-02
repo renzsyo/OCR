@@ -1,5 +1,6 @@
 import sys, os, time, threading, cv2, requests
 from PyQt6 import uic
+from inference import scan_passport, scan_national_id, scan_driver_license
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -38,11 +39,11 @@ class MainWindow(QMainWindow):
 
         try:
             self.continuep1.clicked.connect(self.go_next)
-            self.continuep2.clicked.connect(self.go_next)
-            self.continuep3.clicked.connect(self.infer_and_continue)
+            self.continuep2.clicked.connect(self.infer_page2_camera_passport)
+            self.continuep3.clicked.connect(self.infer_page3_upload_passport)
             self.continuep4.clicked.connect(self.go_next)
-            self.continuep5.clicked.connect(self.go_next)
-            self.continuep6.clicked.connect(self.go_next)
+            self.continuep5.clicked.connect(self.infer_page5)
+            self.continuep6.clicked.connect(self.infer_page6)
             self.backButtonp1.clicked.connect(self.go_back)
             self.backButtonp2.clicked.connect(self.go_back)
             self.backButtonp3.clicked.connect(self.go_back)
@@ -93,6 +94,146 @@ class MainWindow(QMainWindow):
             self.uploadBackButton.clicked.connect(lambda: self.upload_image(self.backImageView, side="back"))
         except Exception:
             pass
+
+    def _run_inference_passport(self, path):
+        result = scan_passport(path)
+        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        print(result)
+
+    def _run_inference_national_id(self, image):
+        result = scan_national_id(image)
+        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        print(result)
+    def _run_inference_driver_license(self, path):
+        result = scan_driver_license(path)
+        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        print(result)
+    def infer_page2_camera_passport(self):
+        if not hasattr(self, "captured_frame"):
+            QMessageBox.warning(self, "No Capture", "Please capture an image first.")
+            return
+
+        path = "temp_passport_camera.jpg"
+        cv2.imwrite(path, self.captured_frame)
+
+        threading.Thread(
+            target=self._run_inference_passport,
+            args=(path,),
+            daemon=True
+        ).start()
+
+        self.go_next()
+
+    def infer_page3_upload_passport(self):
+        if not self.uploaded_files:
+            QMessageBox.warning(self, "No file", "Please upload an image first.")
+            return
+
+        if self.current_index < 0:
+            self.current_index = len(self.uploaded_files) - 1
+
+        if self.current_index < 0:
+            QMessageBox.warning(self, "No file", "Please upload an image first.")
+            return
+
+        path = self.uploaded_files[self.current_index].get("path")
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Error", "Selected file not found.")
+            return
+
+        threading.Thread(
+            target=self._run_inference_passport,
+            args=(path,),
+            daemon=True
+        ).start()
+
+        self.go_next()
+
+    def infer_page5(self):
+        selected_id = self.idOption.currentText()
+
+        # National ID -> process back only
+        if selected_id == "National ID":
+            if not hasattr(self, "captured_back_frame") or self.captured_back_frame is None:
+                QMessageBox.warning(self, "Missing Capture", "Please capture the back image.")
+                return
+            print("Back frame type:", type(self.captured_back_frame))
+            temp_path = f"back_{int(time.time())}.jpg"
+            cv2.imwrite(temp_path, self.captured_back_frame)
+
+            threading.Thread(
+                target=self._run_inference_national_id,
+                args=(self.captured_back_frame,),
+                daemon=True
+            ).start()
+
+            self.go_next()
+            return
+
+        # Driver’s License -> process front only
+        elif selected_id == "Driver's License":
+            if not hasattr(self, "captured_front_frame") or self.captured_front_frame is None:
+                QMessageBox.warning(self, "Missing Capture", "Please capture the front image.")
+                return
+
+            temp_path = f"front_{int(time.time())}.jpg"
+            cv2.imwrite(temp_path, self.captured_front_frame)
+
+            threading.Thread(
+                target=self._run_inference_driver_license,
+                args=(temp_path,),
+                daemon=True
+            ).start()
+
+            self.go_next()
+            return
+
+        else:
+            QMessageBox.warning(self, "Unknown ID", "Please select a valid ID type.")
+
+    def infer_page6(self):
+
+        selected_id = self.idOption.currentText()
+
+        # ✅ Validate both images uploaded
+        if not hasattr(self, "front_file") or not self.front_file:
+            QMessageBox.warning(self, "Missing Front Image", "Please upload the front image.")
+            return
+
+        if not hasattr(self, "back_file") or not self.back_file:
+            QMessageBox.warning(self, "Missing Back Image", "Please upload the back image.")
+            return
+
+        # 🪪 National ID → infer BACK only
+        if selected_id == "National ID":
+
+            image = cv2.imread(self.back_file["path"])
+
+            threading.Thread(
+                target=self._run_inference_national_id,
+                args=(image,),
+                daemon=True
+            ).start()
+
+            self.go_next()
+            return
+
+        # 🚗 Driver's License → infer FRONT only
+        elif selected_id == "Driver's License":
+
+            image = cv2.imread(self.front_file["path"])
+
+            threading.Thread(
+                target=self._run_inference_driver_license,
+                args=(image,),  # pass numpy since you said all expect image
+                daemon=True
+            ).start()
+
+            self.go_next()
+            return
+
+        else:
+            QMessageBox.warning(self, "Invalid Selection", "Please select a valid ID type.")
 
     def start_camera(self):
         if not self.cap or not self.cap.isOpened():
@@ -174,7 +315,6 @@ class MainWindow(QMainWindow):
             return
 
         # Start background thread to send OCR request (non-blocking)
-        threading.Thread(target=self._send_ocr_request, args=(save_path,), daemon=True).start()
 
         # Show captured image in cameraView
         try:
@@ -218,88 +358,8 @@ class MainWindow(QMainWindow):
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             ))
-            threading.Thread(target=self._send_ocr_request, args=(save_path,), daemon=True).start()
 
-    def infer_and_continue(self):
-        """
-        Called when continuep3 is clicked.
-        1) Send inference request (upload page)
-        2) Then go to next page
-        """
-        # Ensure there is at least one uploaded file
-        if not self.uploaded_files:
-            QMessageBox.warning(self, "No file", "Please upload an image first.")
-            return
 
-        # Use current selection or last file
-        if self.current_index < 0:
-            self.current_index = len(self.uploaded_files) - 1
-
-        if self.current_index < 0:
-            QMessageBox.warning(self, "No file", "Please upload an image first.")
-            return
-
-        file_info = self.uploaded_files[self.current_index]
-        path = file_info.get("path")
-
-        if not path or not os.path.exists(path):
-            QMessageBox.warning(self, "Error", "Selected file not found.")
-            return
-
-        # Debug
-        print(f"[DEBUG] Sending inference for: {path}")
-
-        # Start inference in background (non-blocking)
-        threading.Thread(target=self._send_ocr_request, args=(path,), daemon=True).start()
-
-        # After triggering inference, go to next page
-        self.go_next()
-
-    def _send_ocr_request(self, image_path):
-        try:
-            # Determine route (same as before)
-            selected_id = self.idOption.currentText()
-            print(f"[DEBUG] Selected ID option: '{selected_id}'")
-
-            if selected_id == "Passport":
-                route = "http://127.0.0.1:5000/pP"
-            elif selected_id == "National ID":
-                route = "http://127.0.0.1:5000/nID"
-            elif selected_id == "Driver's License":
-                route = "http://127.0.0.1:5000/dL"
-            else:
-                print("[DEBUG] Unknown ID option")
-                return
-
-            print(f"[DEBUG] Using route: {route}")
-
-            with open(image_path, "rb") as f:
-                files = {"file": f}
-                resp = requests.post(route, files=files, timeout=15)
-
-            print(f"[DEBUG] HTTP Status: {resp.status_code}")
-
-            try:
-                data = resp.json()
-            except Exception:
-                data = {"response": resp.text}
-
-            print("[DEBUG] Server response:", data)
-
-            # Update UI from main thread (safe)
-            QTimer.singleShot(0, lambda: print("[DEBUG] UI update triggered"))
-            print("[DEBUG] Setting pendingResponse")
-            textbox = self.findChild(QTextEdit, "extractedTextBox")
-            if textbox:
-                formatted_text = self.format_mrz_response(data)
-                textbox.setPlainText(formatted_text)
-                print("[DEBUG] Textbox updated successfully")
-            else:
-                print("[DEBUG] extractedTextBox not found in UI")
-            print("[DEBUG] pendingResponse set:", self.pendingResponse)
-
-        except Exception as e:
-            print("[DEBUG] OCR request failed:", e)
 
     def show_response_in_listwidget(self, data):
         currentTab = self.reviewTabWidget.currentWidget()

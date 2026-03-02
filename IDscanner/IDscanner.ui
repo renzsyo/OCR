@@ -276,7 +276,7 @@
      <widget class="QPushButton" name="backButtonp1">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>30</x>
         <y>10</y>
         <width>75</width>
         <height>24</height>
@@ -359,7 +359,7 @@
      <widget class="QPushButton" name="backButtonp2">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>30</x>
         <y>10</y>
         <width>75</width>
         <height>24</height>
@@ -419,7 +419,7 @@
      <widget class="QPushButton" name="backButtonp3">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>30</x>
         <y>10</y>
         <width>75</width>
         <height>24</height>
@@ -434,27 +434,27 @@
      <widget class="QLabel" name="cameraView2">
       <property name="geometry">
        <rect>
-        <x>420</x>
-        <y>130</y>
-        <width>301</width>
-        <height>301</height>
+        <x>400</x>
+        <y>170</y>
+        <width>331</width>
+        <height>321</height>
        </rect>
       </property>
       <property name="text">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
      <widget class="QLabel" name="cameraView1">
       <property name="geometry">
        <rect>
         <x>40</x>
-        <y>130</y>
-        <width>301</width>
-        <height>301</height>
+        <y>170</y>
+        <width>331</width>
+        <height>321</height>
        </rect>
       </property>
       <property name="text">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
      <widget class="QPushButton" name="continuep5">
@@ -493,7 +493,7 @@
       <property name="geometry">
        <rect>
         <x>270</x>
-        <y>80</y>
+        <y>70</y>
         <width>211</width>
         <height>16</height>
        </rect>
@@ -505,8 +505,8 @@
      <widget class="QPushButton" name="captureButtonp2">
       <property name="geometry">
        <rect>
-        <x>130</x>
-        <y>450</y>
+        <x>150</x>
+        <y>470</y>
         <width>111</width>
         <height>41</height>
        </rect>
@@ -519,7 +519,7 @@
       <property name="geometry">
        <rect>
         <x>520</x>
-        <y>450</y>
+        <y>470</y>
         <width>111</width>
         <height>41</height>
        </rect>
@@ -531,7 +531,7 @@
      <widget class="QPushButton" name="backButtonp4">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>30</x>
         <y>10</y>
         <width>75</width>
         <height>24</height>
@@ -541,39 +541,65 @@
        <string>Back</string>
       </property>
      </widget>
+     <widget class="QLabel" name="label_13">
+      <property name="geometry">
+       <rect>
+        <x>90</x>
+        <y>130</y>
+        <width>231</width>
+        <height>71</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Capture an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_14">
+      <property name="geometry">
+       <rect>
+        <x>450</x>
+        <y>130</y>
+        <width>231</width>
+        <height>71</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Capture an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QWidget" name="page_6">
      <widget class="QLabel" name="backImageView">
       <property name="geometry">
        <rect>
         <x>420</x>
-        <y>130</y>
+        <y>170</y>
         <width>301</width>
         <height>301</height>
        </rect>
       </property>
       <property name="text">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
      <widget class="QLabel" name="frontImageView">
       <property name="geometry">
        <rect>
         <x>40</x>
-        <y>130</y>
+        <y>170</y>
         <width>301</width>
         <height>301</height>
        </rect>
       </property>
       <property name="text">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
      <widget class="QPushButton" name="continuep6">
       <property name="geometry">
        <rect>
-        <x>310</x>
-        <y>510</y>
+        <x>330</x>
+        <y>530</y>
         <width>121</width>
         <height>41</height>
        </rect>
@@ -586,7 +612,7 @@
       <property name="geometry">
        <rect>
         <x>130</x>
-        <y>460</y>
+        <y>480</y>
         <width>121</width>
         <height>41</height>
        </rect>
@@ -599,8 +625,8 @@ Image</string>
      <widget class="QPushButton" name="uploadBackButton">
       <property name="geometry">
        <rect>
-        <x>520</x>
-        <y>460</y>
+        <x>510</x>
+        <y>480</y>
         <width>121</width>
         <height>41</height>
        </rect>
@@ -632,7 +658,7 @@ Image</string>
      <widget class="QPushButton" name="backButtonp5">
       <property name="geometry">
        <rect>
-        <x>20</x>
+        <x>30</x>
         <y>10</y>
         <width>75</width>
         <height>24</height>
@@ -640,6 +666,32 @@ Image</string>
       </property>
       <property name="text">
        <string>Back</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_15">
+      <property name="geometry">
+       <rect>
+        <x>80</x>
+        <y>90</y>
+        <width>231</width>
+        <height>71</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_16">
+      <property name="geometry">
+       <rect>
+        <x>450</x>
+        <y>90</y>
+        <width>231</width>
+        <height>71</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
     </widget>

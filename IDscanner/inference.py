@@ -299,8 +299,8 @@ def scan_passport(image):
 
     result = {"mrz": None, "valid": False}
 
-    processed = preprocess_grayscale(image)
-    ocr_results = ocr.predict(processed)
+    #processed = preprocess_grayscale(image)
+    ocr_results = ocr.predict(image)
 
     if ocr_results:
         result["mrz"] = parse_mrz_from_results(ocr_results)
@@ -328,5 +328,6 @@ def scan_driver_license(image):
             print(f"{t}  |  score: {s}")
         result["fields"] = extract_license_fields(rec_texts, rec_scores)
         result["valid"] = len(result["fields"]) > 0
+
 
     return result

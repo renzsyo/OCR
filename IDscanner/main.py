@@ -1,4 +1,4 @@
-import sys, os, time, threading, cv2, requests
+import sys, os, time, threading, cv2, shutil
 from PyQt6 import uic
 from inference import scan_passport, scan_national_id, scan_driver_license
 from PyQt6.QtWidgets import (
@@ -235,6 +235,12 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Invalid Selection", "Please select a valid ID type.")
 
+    def _get_output_folder(self, category, subfolder):
+        base = "output"
+        folder = os.path.join(base, category.strip(), subfolder)
+        os.makedirs(folder, exist_ok=True)
+        return folder
+
     def start_camera(self):
         if not self.cap or not self.cap.isOpened():
             self.cap = cv2.VideoCapture(0)
@@ -307,12 +313,12 @@ class MainWindow(QMainWindow):
         self.captured_frame = self.current_frame.copy()
 
         # Save with unique filename to avoid overwriting
-        save_path = f"captured_id_{int(time.time())}.jpg"
-        try:
-            cv2.imwrite(save_path, self.captured_frame)
-        except Exception as e:
-            print("Failed to save captured image:", e)
-            return
+        selected_id = self.idOption.currentText()
+        folder = self._get_output_folder(selected_id, "Capture")
+        filename = f"{int(time.time())}.jpg"
+        save_path = os.path.join(folder, filename)
+        cv2.imwrite(save_path, self.captured_frame)
+        print("Saved capture to:", save_path)
 
         # Start background thread to send OCR request (non-blocking)
 
@@ -334,6 +340,7 @@ class MainWindow(QMainWindow):
             print("capture_image display error:", e)
 
     def toggle_capture(self, frame_attr, display_label, button):
+        selected_id = self.idOption.currentText()
         if hasattr(self,frame_attr):
             delattr(self, frame_attr)
             button.setText("Capture Image")
@@ -346,8 +353,12 @@ class MainWindow(QMainWindow):
             setattr(self, frame_attr, frame)
             button.setText("Recapture Image")
 
-            save_path = f"{frame_attr}_{int(time.time())}.jpg"
+            folder = self._get_output_folder(selected_id, "Capture")
+            filename = f"{frame_attr}_{int(time.time())}.jpg"
+            save_path = os.path.join(folder, filename)
+
             cv2.imwrite(save_path, frame)
+            print("Saved to:", save_path)
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb.shape
@@ -399,13 +410,28 @@ class MainWindow(QMainWindow):
             if not os.path.exists(file_path):
                 return
 
+            selected_id = self.idOption.currentText()
+            folder = self._get_output_folder(selected_id, "Upload")
+
+            filename = os.path.basename(file_path)
+            dest = os.path.join(folder, filename)
+
+            try:
+                shutil.copyfile(file_path, dest)
+                print("Upload copied to:", dest)
+            except Exception as e:
+                print("Copy failed:", e)
+                QMessageBox.warning(self, "Copy Error", str(e))
+                return
+
             file_info = {
-                "path": file_path,
-                "name": os.path.basename(file_path),
-                "size": f"{os.path.getsize(file_path) / (1024 * 1024):.2f} MB",
+                "path": dest,
+                "name": filename,
+                "size": f"{os.path.getsize(dest) / (1024 * 1024):.2f} MB",
                 "status": "Completed",
                 "side": side,
             }
+
             if side == "front":
                 self.front_file = file_info
             elif side == "back":
@@ -417,7 +443,7 @@ class MainWindow(QMainWindow):
                 if self.current_index >= 0:
                     self.fileListWidget.setCurrentRow(self.current_index)
 
-            frame = cv2.imread(file_path)
+            frame = cv2.imread(dest)
             if frame is not None:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb.shape
@@ -435,7 +461,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print("Upload failed:", e)
             QMessageBox.warning(self, "Upload Error", f"Upload failed: {e}")
-
     def refresh_file_list(self):
         try:
             self.fileListWidget.clear()

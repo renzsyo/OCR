@@ -12,7 +12,7 @@ from mrz.checker.td3 import TD3CodeChecker
 
 
 # ====================================================
-# OCR CONFIG (Loaded Once)
+# OCR CONFIG
 # ====================================================
 
 ocr = PaddleOCR(
@@ -29,36 +29,33 @@ ocr = PaddleOCR(
 # HELPERS
 # ====================================================
 
-def preprocess_grayscale(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.equalizeHist(gray)
-    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+#def preprocess_grayscale(img): #not used yet(lowers accuracy of PaddleOCR)
+    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #gray = cv2.equalizeHist(gray)
+    #return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
-def preprocess_for_ocr(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
+#def preprocess_for_ocr(img): #not used yet(lowers accuracy of PaddleOCR)
+    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Increase contrast
-    gray = cv2.equalizeHist(gray)
-
+    #gray = cv2.equalizeHist(gray)
     # Denoise
-    gray = cv2.fastNlMeansDenoising(gray, None, 30, 7, 21)
-
+    #gray = cv2.fastNlMeansDenoising(gray, None, 30, 7, 21)
     # Adaptive threshold (makes text clearer)
-    thresh = cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        31, 2
-    )
+    #thresh = cv2.adaptiveThreshold(
+        #gray, 255,
+        #cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        #cv2.THRESH_BINARY,
+        #31, 2
+    #)
 
-    return cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
-def decode_qr_opencv(image):
+    #return cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+def decode_qr_opencv(image): #Used first to decode qr first before pyzbar
     detector = cv2.QRCodeDetector()
     data, _, _ = detector.detectAndDecode(image)
     return data if data else None
 
 
-def decode_qr_pyzbar(image_bytes):
+def decode_qr_pyzbar(image_bytes):#if opencv fails this is the backup qr decoder
     try:
         img = Image.open(io.BytesIO(image_bytes))
         decoded = pyzbar_decode(img)
@@ -109,14 +106,14 @@ def parse_mrz_from_results(results):
         fields = checker.fields()
 
         return {
-            "surname": fields.surname,
-            "given_names": fields.name,
-            "country": fields.country,
-            "document_number": fields.document_number,
-            "nationality": fields.nationality,
-            "birth_date": fields.birth_date,
-            "sex": fields.sex,
-            "expiry_date": fields.expiry_date,
+            "Surname": fields.surname,
+            "Given_names": fields.name,
+            "Country": fields.country,
+            "Document_number": fields.document_number,
+            "Nationality": fields.nationality,
+            "Birth_date": fields.birth_date,
+            "Sex": fields.sex,
+            "Expiry_date": fields.expiry_date,
         }
 
     except Exception:
@@ -135,14 +132,14 @@ def parse_mrz_from_results(results):
         given = parts[1].replace("<", "").strip() if len(parts) > 1 else None
 
         return {
-            "surname": surname,
-            "given_names": given,
-            "country": None,
-            "document_number": None,
-            "nationality": None,
-            "birth_date": None,
-            "sex": None,
-            "expiry_date": None,
+            "Surname": surname,
+            "Given_names": given,
+            "Country": None,
+            "Document_number": None,
+            "Nationality": None,
+            "Birth_date": None,
+            "Sex": None,
+            "Expiry_date": None,
         }
 
     except Exception:
@@ -181,9 +178,6 @@ def find_nearest_date_any_direction(cleaned, start_index, max_distance=6):
 
 
 def extract_license_fields(rec_texts, rec_scores):
-    print("RAW OCR OUTPUT:")
-    for t, s in zip(rec_texts, rec_scores):
-        print(f"{t} | score: {s}")
     cleaned = [t.strip() for t, s in zip(rec_texts, rec_scores) if s >= 0.75]
 
     fields = {}
@@ -271,14 +265,14 @@ def extract_license_fields(rec_texts, rec_scores):
 
 
 # ====================================================
-# PUBLIC FUNCTIONS (FOR main.py)
+# PUBLIC FUNCTIONS (Called in main.py)
 # ====================================================
 
 def scan_national_id(image):
     if image is None:
         return {"error": "invalid image"}
 
-    result = {"qr": None, "parsed": None, "valid": False}
+    result = {"NationalID/QR": None, "parsed": None, "valid": False}
 
     _, buffer = cv2.imencode(".png", image)
     image_bytes = buffer.tobytes()
@@ -286,8 +280,8 @@ def scan_national_id(image):
     qr_data = decode_qr_opencv(image) or decode_qr_pyzbar(image_bytes)
 
     if qr_data:
-        result["qr"] = qr_data
-        result["parsed"] = parse_qr_data(qr_data)
+        result["NationalID/QR"] = parse_qr_data(qr_data)
+        #result["parsed"] = parse_qr_data(qr_data)
         result["valid"] = True
 
     return result
@@ -297,14 +291,14 @@ def scan_passport(image):
     if image is None:
         return {"error": "invalid image"}
 
-    result = {"mrz": None, "valid": False}
+    result = {"Passport/MRZ": None, "valid": False}
 
     #processed = preprocess_grayscale(image)
     ocr_results = ocr.predict(image)
 
     if ocr_results:
-        result["mrz"] = parse_mrz_from_results(ocr_results)
-        result["valid"] = result["mrz"] is not None
+        result["Passport/MRZ"] = parse_mrz_from_results(ocr_results)
+        result["valid"] = result["Passport/MRZ"] is not None
 
     return result
 
@@ -313,7 +307,7 @@ def scan_driver_license(image):
     if image is None:
         return {"error": "invalid image"}
 
-    result = {"fields": {}, "valid": False}
+    result = {"Driverslicense/OCR": {}, "valid": False}
 
     #processed = preprocess_grayscale(image)
     #cv2.imwrite("processed_debug.png", processed)
@@ -323,11 +317,7 @@ def scan_driver_license(image):
         data = ocr_results[0]
         rec_texts = data.get("rec_texts", [])
         rec_scores = data.get("rec_scores", [])
-        print("RAW OCR TEXTS:")
-        for t, s in zip(rec_texts, rec_scores):
-            print(f"{t}  |  score: {s}")
-        result["fields"] = extract_license_fields(rec_texts, rec_scores)
-        result["valid"] = len(result["fields"]) > 0
-
+        result["Driverslicense/OCR"] = extract_license_fields(rec_texts, rec_scores)
+        result["valid"] = len(result["Driverslicense/OCR"]) > 0
 
     return result

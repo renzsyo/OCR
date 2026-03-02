@@ -1,4 +1,4 @@
-import sys, os, time, threading, cv2, requests, faulthandler
+import sys, os, time, threading, cv2, requests
 from PyQt6 import uic
 from PyQt6.QtWidgets import (
     QApplication,
@@ -9,8 +9,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
-
-faulthandler.enable()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -43,15 +41,27 @@ class MainWindow(QMainWindow):
             self.continuep2.clicked.connect(self.go_next)
             self.continuep3.clicked.connect(self.infer_and_continue)
             self.continuep4.clicked.connect(self.go_next)
-            self.captureButtonp2.clicked.connect(self.capture_image)
-            self.recaptureButtonp2.clicked.connect(self.recapture_image)
+            self.continuep5.clicked.connect(self.go_next)
+            self.continuep6.clicked.connect(self.go_next)
+            self.backButtonp1.clicked.connect(self.go_back)
+            self.backButtonp2.clicked.connect(self.go_back)
+            self.backButtonp3.clicked.connect(self.go_back)
+            self.backButtonp4.clicked.connect(self.go_back)
+            self.backButtonp5.clicked.connect(self.go_back)
+            self.captureButtonp1.clicked.connect(self.capture_image)
+            self.recaptureButtonp1.clicked.connect(self.recapture_image)
+            self.captureButtonp2.clicked.connect(
+                lambda : self.toggle_capture("captured_front_frame", self.cameraView1, self.captureButtonp2)
+            )
+            self.captureButtonp3.clicked.connect(
+                lambda: self.toggle_capture("captured_back_frame", self.cameraView2, self.captureButtonp3)
+            )
             self.uploadButtonp3.clicked.connect(
                 lambda: self.upload_image(self.uploadedImageView)
             )
         except Exception:
             pass
 
-        # List interactions
         try:
             # Use currentRowChanged so keyboard navigation also updates preview
             self.fileListWidget.currentRowChanged.connect(self.on_current_row_changed)
@@ -74,6 +84,15 @@ class MainWindow(QMainWindow):
             3: 0,
             6: 0,
         }
+        self.page_history = []
+
+        self.front_file = None
+        self.back_file = None
+        try:
+            self.uploadFrontButton.clicked.connect(lambda: self.upload_image(self.frontImageView, side="front"))
+            self.uploadBackButton.clicked.connect(lambda: self.upload_image(self.backImageView, side="back"))
+        except Exception:
+            pass
 
     def start_camera(self):
         if not self.cap or not self.cap.isOpened():
@@ -111,15 +130,25 @@ class MainWindow(QMainWindow):
             if qimg.isNull():
                 return
             pixmap = QPixmap.fromImage(qimg)
-            scaled = pixmap.scaled(
-                getattr(self, "cameraView").size()
-                if hasattr(self, "cameraView")
-                else pixmap.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            if hasattr(self, "cameraView"):
-                self.cameraView.setPixmap(scaled)
+
+            view_to_attr = {
+                "cameraView": None,
+                "cameraView1": "captured_front_frame",
+                "cameraView2": "captured_back_frame",
+            }
+            for view_name, frozen_attr in view_to_attr.items():
+                view = getattr(self, view_name, None)
+                if view is None:
+                    continue
+
+                if frozen_attr and hasattr(self, frozen_attr):
+                    continue
+                scaled = pixmap.scaled(
+                    view.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                view.setPixmap(scaled)
         except Exception as e:
             print("update_frame error:", e)
 
@@ -163,6 +192,33 @@ class MainWindow(QMainWindow):
                 self.cameraView.setPixmap(scaled)
         except Exception as e:
             print("capture_image display error:", e)
+
+    def toggle_capture(self, frame_attr, display_label, button):
+        if hasattr(self,frame_attr):
+            delattr(self, frame_attr)
+            button.setText("Capture Image")
+            display_label.clear()
+            self.start_camera()
+        else:
+            if not hasattr(self, "current_frame"):
+                return
+            frame = self.current_frame.copy()
+            setattr(self, frame_attr, frame)
+            button.setText("Recapture Image")
+
+            save_path = f"{frame_attr}_{int(time.time())}.jpg"
+            cv2.imwrite(save_path, frame)
+
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            display_label.setPixmap(pixmap.scaled(
+                display_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            ))
+            threading.Thread(target=self._send_ocr_request, args=(save_path,), daemon=True).start()
 
     def infer_and_continue(self):
         """
@@ -263,45 +319,58 @@ class MainWindow(QMainWindow):
         print("[DEBUG] Response written to extractedTextBox")
 
     def recapture_image(self):
-        # Resume camera preview
+        if hasattr(self, "captured_frame"):
+            del self.captured_frame
+
         self.start_camera()
 
-    def upload_image(self, target_label):
+    def upload_image(self, target_label, side=None):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select ID Images",
             "",
             "Image Files (*.png *.jpg *.jpeg *.bmp)",
         )
-
         if not file_paths:
             return
 
         try:
-            for file_path in file_paths:
-                if not os.path.exists(file_path):
-                    continue
-                file_size = os.path.getsize(file_path) / (1024 * 1024)
-                file_name = os.path.basename(file_path)
-                self.uploaded_files.append(
-                    {
-                        "path": file_path,
-                        "name": file_name,
-                        "size": f"{file_size:.2f} MB",
-                        "status": "Completed",
-                    }
-                )
+            file_path = file_paths[-1]
+            if not os.path.exists(file_path):
+                return
 
-            # Set current index to last uploaded file
-            if self.uploaded_files:
+            file_info = {
+                "path": file_path,
+                "name": os.path.basename(file_path),
+                "size": f"{os.path.getsize(file_path) / (1024 * 1024):.2f} MB",
+                "status": "Completed",
+                "side": side,
+            }
+            if side == "front":
+                self.front_file = file_info
+            elif side == "back":
+                self.back_file = file_info
+            else:
+                self.uploaded_files.append(file_info)
                 self.current_index = len(self.uploaded_files) - 1
+                self.refresh_file_list()
+                if self.current_index >= 0:
+                    self.fileListWidget.setCurrentRow(self.current_index)
 
-            self.refresh_file_list()
-
-            if self.current_index >= 0:
-                # display the last uploaded file
-                self.fileListWidget.setCurrentRow(self.current_index)
-                self.display_file_details(target_label)
+            frame = cv2.imread(file_path)
+            if frame is not None:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb.shape
+                bytes_per_line = ch * w
+                qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                pixmap = QPixmap.fromImage(qimg)
+                target_label.setPixmap(
+                    pixmap.scaled(
+                        target_label.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
 
         except Exception as e:
             print("Upload failed:", e)
@@ -496,7 +565,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Could not save text file: {e}")
 
     def show_review_page(self):
-        self.reviewTabWidget.clear()  # clear old tabs
+        self.reviewTabWidget.clear()
+
+        if self.front_file:
+            self._add_file_tab(self.front_file, "Front Side")
+        if self.back_file:
+            self._add_file_tab(self.back_file, "Back Side")
 
         # --- Add captured frame as a tab if available ---
         if hasattr(self, "captured_frame"):
@@ -536,7 +610,6 @@ class MainWindow(QMainWindow):
 
                 extractedTextBox.setPlainText(text)
 
-                # Clear pending (so it doesn't repeat)
                 self.pendingResponse = None
             else:
                 extractedTextBox.setPlainText("Sample extracted text will appear here.")
@@ -553,6 +626,46 @@ class MainWindow(QMainWindow):
             layout.addLayout(right_layout)
 
             self.reviewTabWidget.addTab(tab, "Captured Image")
+
+        for frame_attr, tab_label in (("captured_front_frame", "Front Capture"),
+                                      ("captured_back_frame", "Back Capture")):
+            if not hasattr(self, frame_attr):
+                continue
+
+            frame = getattr(self, frame_attr)
+            tab = QWidget()
+            layout = QHBoxLayout(tab)
+
+            pictureView = QLabel()
+            pictureView.setFixedSize(512, 384)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            pictureView.setPixmap(
+                pixmap.scaled(pictureView.size(),
+                              Qt.AspectRatioMode.KeepAspectRatio,
+                              Qt.TransformationMode.SmoothTransformation)
+            )
+
+            right_layout = QVBoxLayout()
+            extractedTextBox = QTextEdit()
+            extractedTextBox.setFixedSize(191, 271)
+            extractedTextBox.setReadOnly(True)
+            extractedTextBox.setPlainText("Sample extracted text will appear here.")
+            tab.extractedTextBox = extractedTextBox
+
+            downloadBtn = QPushButton("Download as File")
+            downloadBtn.setFixedSize(121, 41)
+            downloadBtn.clicked.connect(
+                lambda _, tb=extractedTextBox, name=tab_label: self.download_text(tb, name)
+            )
+            right_layout.addWidget(extractedTextBox)
+            right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
+            layout.addWidget(pictureView)
+            layout.addLayout(right_layout)
+            self.reviewTabWidget.addTab(tab, tab_label)
 
         # --- Add uploaded files as tabs ---
         for file in self.uploaded_files:
@@ -612,10 +725,66 @@ class MainWindow(QMainWindow):
 
             self.reviewTabWidget.addTab(tab, file["name"])
 
-    def reset_session(self):
-        if hasattr(self, "captured_frame"):
-            del self.captured_frame
+    def _add_file_tab(self, file_info, tab_name):
+        path = file_info.get("path")
+        frame = cv2.imread(path)
+        if frame is None:
+            return
 
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+
+        # Image preview
+        pictureView = QLabel()
+        pictureView.setFixedSize(512, 384)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        bytes_per_line = ch * w
+        qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        pixmap = QPixmap.fromImage(qimg)
+        pictureView.setPixmap(
+            pixmap.scaled(pictureView.size(),
+                          Qt.AspectRatioMode.KeepAspectRatio,
+                          Qt.TransformationMode.SmoothTransformation)
+        )
+
+        # Right side layout (text + button stacked vertically)
+        right_layout = QVBoxLayout()
+
+        extractedTextBox = QTextEdit()
+        extractedTextBox.setFixedSize(191, 271)
+        extractedTextBox.setReadOnly(True)
+        extractedTextBox.setPlainText("Sample extracted text will appear here.")
+        tab.extractedTextBox = extractedTextBox  # store reference
+
+        downloadBtn = QPushButton("Download as File")
+        downloadBtn.setFixedSize(121, 41)
+        downloadBtn.clicked.connect(
+            lambda _, tb=extractedTextBox, fname=file_info["name"]: self.download_text(tb, fname)
+        )
+
+        right_layout.addWidget(extractedTextBox)
+        right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        layout.addWidget(pictureView)
+        layout.addLayout(right_layout)
+
+        self.reviewTabWidget.addTab(tab, tab_name)
+
+    def reset_session(self):
+
+        for attr in ("captured_frame", "captured_front_frame", "captured_back_frame"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
+        try:
+            self.captureButtonp2.setText("Capture Image")
+            self.captureButtonp3.setText("Capture Image")
+        except Exception:
+            pass
+
+        self.front_file = None
+        self.back_file = None
         self.uploaded_files.clear()
         self.current_index = -1
 
@@ -628,17 +797,27 @@ class MainWindow(QMainWindow):
             pass
 
         try:
-            self.pictureView1.clear(),
-            self.extractedTextBox.clear(),
-            self.uploadedImageView.clear(),
-            self.fileListWidget.clear(),
-            self.fileNameLabel.clear(),
-            self.fileSizeLabel.clear(),
+            self.pictureView1.clear()
+            self.extractedTextBox.clear()
+            self.uploadedImageView.clear()
+            self.fileListWidget.clear()
+            self.fileNameLabel.clear()
+            self.fileSizeLabel.clear()
             self.fileStatusLabel.clear()
         except Exception:
             pass
-    #Navigation Between Pages
+
+    def go_back(self):
+        if not self.page_history:
+            if not self.page_history:
+                return
+
+        prev_page = self.page_history.pop()
+        self.Form1.setCurrentIndex(prev_page)
+
+    # Navigation Between Pages
     def go_next(self):
+        self.page_history.append(self.Form1.currentIndex())
         current = self.Form1.currentIndex()
 
         if current in self.page_flow:
@@ -648,7 +827,12 @@ class MainWindow(QMainWindow):
             if current == 2 and not self.uploaded_files:
                 QMessageBox.warning(self, "No file", "Please upload an file first")
                 return
-
+            if current == 4 and (not hasattr(self, "captured_front_frame") or not hasattr(self, "captured_back_frame")):
+                QMessageBox.warning(self, "Missing Capture", "Please capture both front and back images first.")
+                return
+            if current == 5 and (not self.front_file or not self.back_file):
+                QMessageBox.warning(self, "Missing files", "Please upload both front and back images first")
+                return
             self.Form1.setCurrentIndex(self.page_flow[current])
 
             if self.page_flow[current] == 0:
@@ -689,6 +873,8 @@ class MainWindow(QMainWindow):
             elif self.uploadOption.isChecked():
                 self.stop_camera()
                 try:
+                    self.frontImageView.clear()
+                    self.backImageView.clear()
                     self.Form1.setCurrentIndex(5)
                 except Exception:
                     pass
@@ -697,11 +883,13 @@ class MainWindow(QMainWindow):
         self.stop_camera()
         super().closeEvent(event)
 
+
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

@@ -36,7 +36,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>3</number>
+     <number>4</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QLabel" name="label">
@@ -218,7 +218,7 @@
        <string>Place your ID in the Camera Frame</string>
       </property>
      </widget>
-     <widget class="QPushButton" name="captureButtonp2">
+     <widget class="QPushButton" name="captureButtonp1">
       <property name="geometry">
        <rect>
         <x>570</x>
@@ -231,7 +231,7 @@
        <string>Capture Image</string>
       </property>
      </widget>
-     <widget class="QPushButton" name="recaptureButtonp2">
+     <widget class="QPushButton" name="recaptureButtonp1">
       <property name="geometry">
        <rect>
         <x>570</x>
@@ -271,6 +271,19 @@
       </property>
       <property name="text">
        <string>Continue</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="backButtonp1">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>10</y>
+        <width>75</width>
+        <height>24</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Back</string>
       </property>
      </widget>
     </widget>
@@ -343,6 +356,19 @@
        <string>Continue</string>
       </property>
      </widget>
+     <widget class="QPushButton" name="backButtonp2">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>10</y>
+        <width>75</width>
+        <height>24</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Back</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QWidget" name="page_4">
      <widget class="QLabel" name="label_12">
@@ -390,34 +416,230 @@
        <number>-1</number>
       </property>
      </widget>
-    </widget>
-    <widget class="QWidget" name="page_5">
-     <widget class="QLabel" name="label_8">
+     <widget class="QPushButton" name="backButtonp3">
       <property name="geometry">
        <rect>
-        <x>220</x>
-        <y>200</y>
-        <width>171</width>
-        <height>231</height>
+        <x>10</x>
+        <y>10</y>
+        <width>75</width>
+        <height>24</height>
        </rect>
       </property>
       <property name="text">
-       <string>Page 5</string>
+       <string>Back</string>
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="page_6">
+    <widget class="QWidget" name="page_5">
+     <widget class="QLabel" name="cameraView2">
+      <property name="geometry">
+       <rect>
+        <x>420</x>
+        <y>130</y>
+        <width>301</width>
+        <height>301</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="cameraView1">
+      <property name="geometry">
+       <rect>
+        <x>40</x>
+        <y>130</y>
+        <width>301</width>
+        <height>301</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="continuep5">
+      <property name="geometry">
+       <rect>
+        <x>330</x>
+        <y>530</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Continue</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_8">
+      <property name="geometry">
+       <rect>
+        <x>280</x>
+        <y>20</y>
+        <width>191</width>
+        <height>51</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>20</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture Image&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
      <widget class="QLabel" name="label_9">
       <property name="geometry">
        <rect>
-        <x>250</x>
-        <y>240</y>
-        <width>49</width>
+        <x>270</x>
+        <y>80</y>
+        <width>211</width>
         <height>16</height>
        </rect>
       </property>
       <property name="text">
-       <string>Page 6</string>
+       <string>Place your ID within the Camera Frame</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="captureButtonp2">
+      <property name="geometry">
+       <rect>
+        <x>130</x>
+        <y>450</y>
+        <width>111</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Capture Image</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="captureButtonp3">
+      <property name="geometry">
+       <rect>
+        <x>520</x>
+        <y>450</y>
+        <width>111</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Capture Image</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="backButtonp4">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>10</y>
+        <width>75</width>
+        <height>24</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Back</string>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="page_6">
+     <widget class="QLabel" name="backImageView">
+      <property name="geometry">
+       <rect>
+        <x>420</x>
+        <y>130</y>
+        <width>301</width>
+        <height>301</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="frontImageView">
+      <property name="geometry">
+       <rect>
+        <x>40</x>
+        <y>130</y>
+        <width>301</width>
+        <height>301</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Front Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Upload an Image of the Front Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="continuep6">
+      <property name="geometry">
+       <rect>
+        <x>310</x>
+        <y>510</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Continue</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uploadFrontButton">
+      <property name="geometry">
+       <rect>
+        <x>130</x>
+        <y>460</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Upload Front Side
+Image</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uploadBackButton">
+      <property name="geometry">
+       <rect>
+        <x>520</x>
+        <y>460</y>
+        <width>121</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Upload Back Side
+Image</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_7">
+      <property name="geometry">
+       <rect>
+        <x>290</x>
+        <y>30</y>
+        <width>181</width>
+        <height>51</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>20</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Upload Image&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="backButtonp5">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>10</y>
+        <width>75</width>
+        <height>24</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Back</string>
       </property>
      </widget>
     </widget>

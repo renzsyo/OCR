@@ -60,6 +60,9 @@ class MainWindow(QMainWindow):
             self.uploadButtonp3.clicked.connect(
                 lambda: self.upload_image(self.uploadedImageView)
             )
+            self.downloadp4.clicked.connect(
+                lambda: self.download_text(self.resultbox, "extracted_text")
+            )
         except Exception:
             pass
 
@@ -97,18 +100,26 @@ class MainWindow(QMainWindow):
 
     def _run_inference_passport(self, path):
         result = scan_passport(path)
-        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        self.pendingResponse = result
+        formatted = self._format_pending_response(result, "Passport")
+        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
         print(result)
 
     def _run_inference_national_id(self, image):
         result = scan_national_id(image)
-        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        self.pendingResponse = result
+        formatted = self._format_pending_response(result, "National ID")
+        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
         print(result)
+
     def _run_inference_driver_license(self, path):
         result = scan_driver_license(path)
-        QTimer.singleShot(0, lambda: self._update_extracted_text(result))
+        self.pendingResponse = result
+        formatted = self._format_pending_response(result, "Driver's License")
+        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
         print(result)
     def infer_page2_camera_passport(self):
+        print("[DEBUG] infer_page2_camera_passport called")
         if not hasattr(self, "captured_frame"):
             QMessageBox.warning(self, "No Capture", "Please capture an image first.")
             return
@@ -116,13 +127,13 @@ class MainWindow(QMainWindow):
         path = "temp_passport_camera.jpg"
         cv2.imwrite(path, self.captured_frame)
 
-        threading.Thread(
-            target=self._run_inference_passport,
-            args=(path,),
-            daemon=True
-        ).start()
+        def task():
+            self._run_inference_passport(path)
 
-        self.go_next()
+            # after inference finishes, navigate on UI thread
+            QTimer.singleShot(0, self.go_next)
+
+        threading.Thread(target=task, daemon=True).start()
 
     def infer_page3_upload_passport(self):
         if not self.uploaded_files:
@@ -141,36 +152,26 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Selected file not found.")
             return
 
-        threading.Thread(
-            target=self._run_inference_passport,
-            args=(path,),
-            daemon=True
-        ).start()
+        def task():
+            self._run_inference_passport(path)
+            QTimer.singleShot(0, self.go_next)
 
-        self.go_next()
+        threading.Thread(target=task, daemon=True).start()
 
     def infer_page5(self):
         selected_id = self.idOption.currentText()
 
-        # National ID -> process back only
         if selected_id == "National ID":
             if not hasattr(self, "captured_back_frame") or self.captured_back_frame is None:
                 QMessageBox.warning(self, "Missing Capture", "Please capture the back image.")
                 return
-            print("Back frame type:", type(self.captured_back_frame))
-            temp_path = f"back_{int(time.time())}.jpg"
-            cv2.imwrite(temp_path, self.captured_back_frame)
 
-            threading.Thread(
-                target=self._run_inference_national_id,
-                args=(self.captured_back_frame,),
-                daemon=True
-            ).start()
+            def task():
+                self._run_inference_national_id(self.captured_back_frame)
+                QTimer.singleShot(0, self.go_next)  # ✅ after inference
 
-            self.go_next()
-            return
+            threading.Thread(target=task, daemon=True).start()
 
-        # Driver’s License -> process front only
         elif selected_id == "Driver's License":
             if not hasattr(self, "captured_front_frame") or self.captured_front_frame is None:
                 QMessageBox.warning(self, "Missing Capture", "Please capture the front image.")
@@ -179,23 +180,18 @@ class MainWindow(QMainWindow):
             temp_path = f"front_{int(time.time())}.jpg"
             cv2.imwrite(temp_path, self.captured_front_frame)
 
-            threading.Thread(
-                target=self._run_inference_driver_license,
-                args=(temp_path,),
-                daemon=True
-            ).start()
+            def task():
+                self._run_inference_driver_license(temp_path)
+                QTimer.singleShot(0, self.go_next)  # ✅ after inference
 
-            self.go_next()
-            return
+            threading.Thread(target=task, daemon=True).start()
 
         else:
             QMessageBox.warning(self, "Unknown ID", "Please select a valid ID type.")
 
     def infer_page6(self):
-
         selected_id = self.idOption.currentText()
 
-        # ✅ Validate both images uploaded
         if not hasattr(self, "front_file") or not self.front_file:
             QMessageBox.warning(self, "Missing Front Image", "Please upload the front image.")
             return
@@ -204,36 +200,91 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Back Image", "Please upload the back image.")
             return
 
-        # 🪪 National ID → infer BACK only
         if selected_id == "National ID":
-
             image = cv2.imread(self.back_file["path"])
 
-            threading.Thread(
-                target=self._run_inference_national_id,
-                args=(image,),
-                daemon=True
-            ).start()
+            def task():
+                self._run_inference_national_id(image)
+                QTimer.singleShot(0, self.go_next)  # ✅ after inference
 
-            self.go_next()
-            return
+            threading.Thread(target=task, daemon=True).start()
 
-        # 🚗 Driver's License → infer FRONT only
         elif selected_id == "Driver's License":
-
             image = cv2.imread(self.front_file["path"])
 
-            threading.Thread(
-                target=self._run_inference_driver_license,
-                args=(image,),  # pass numpy since you said all expect image
-                daemon=True
-            ).start()
+            def task():
+                self._run_inference_driver_license(image)
+                QTimer.singleShot(0, self.go_next)  # ✅ after inference
 
-            self.go_next()
-            return
+            threading.Thread(target=task, daemon=True).start()
 
         else:
             QMessageBox.warning(self, "Invalid Selection", "Please select a valid ID type.")
+
+    def _format_pending_response(self, result, id_type):
+        print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
+        try:
+            if id_type == "National ID":
+                data = result.get("NationalID/QR", {})
+                subject = data.get("subject", {})
+                return (
+
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Last Name   : {subject.get('lName', 'N/A')}\n"
+                    f"  First Name  : {subject.get('fName', 'N/A')}\n"
+                    f"  Middle Name : {subject.get('mName', 'N/A')}\n"
+                    f"  Suffix      : {subject.get('Suffix', 'N/A') or 'None'}\n"
+                    f"  Sex         : {subject.get('sex', 'N/A')}\n"
+                    f"  Birthday    : {subject.get('DOB', 'N/A')}\n"
+                    f"  Birthplace  : {subject.get('POB', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  PCN         : {subject.get('PCN', 'N/A')}\n"
+                    f"  Issuer      : {data.get('Issuer', 'N/A')}\n"
+                    f"  Date Issued : {data.get('DateIssued', 'N/A')}\n\n"
+
+                )
+
+            elif id_type == "Driver's License":
+                data = result.get("parsed", {}).get("Driverslicense/OCR", {})
+                return (
+                    f"PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name        : {data.get('Name', 'N/A')}\n"
+                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
+                    f"  Birthday    : {data.get('Birthdate', 'N/A')}\n"
+                    f"  Address     : {data.get('Address', 'N/A')}\n\n"
+                    f"  LICENSE DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  License No  : {data.get('License No', 'N/A')}\n"
+                    f"  Expiration  : {data.get('Expiration Date', 'N/A')}\n\n"
+
+                )
+
+            elif id_type == "Passport":
+                data = result.get("parsed", {}).get("Passport/MRZ", {})
+                return (
+
+                    f" PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Last Name   : {data.get('Surname', 'N/A')}\n"
+                    f"  First Name  : {data.get('Given_names', 'N/A')}\n"
+                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
+                    f"  Birthday    : {data.get('Birth_date', 'N/A')}\n\n"
+                    f"  PASSPORT DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  Document No : {data.get('Document_number', 'N/A')}\n"
+                    f"  Nationality : {data.get('Nationality', 'N/A')}\n"
+                    f"  Country     : {data.get('Country', 'N/A')}\n"
+                    f"  Expiry Date : {data.get('Expiry_date', 'N/A')}\n\n"
+                )
+
+        except Exception as e:
+            return f"⚠️ Could not format result: {e}\n\nRaw output:\n{result}"
+
+    def _update_extracted_text(self, text):
+        self.extractedText.setText(text) # or whatever your text widget is
 
     def _get_output_folder(self, category, subfolder):
         base = "output"
@@ -633,6 +684,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No text", "There is no text to save.")
             return
 
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Extracted Text",
+            default_name + ".txt",
+            "Text Files (*.txt)"
+        )
+
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            QMessageBox.information(self, "Saved", f"File saved to:\n{path}")
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Extracted Text",
@@ -656,13 +719,18 @@ class MainWindow(QMainWindow):
             self._add_file_tab(self.front_file, "Front Side")
         if self.back_file:
             self._add_file_tab(self.back_file, "Back Side")
-
+        if hasattr(self, "pendingResponse") and self.pendingResponse is not None:
+            selected_id = self.idOption.currentText()
+            formatted = self._format_pending_response(self.pendingResponse, selected_id)
+            self.resultbox.setPlainText(formatted)
+            self.pendingResponse = None
+            print("[DEBUG] resultbox populated from pendingResponse")
         # --- Add captured frame as a tab if available ---
         if hasattr(self, "captured_frame"):
             tab = QWidget()
             layout = QHBoxLayout(tab)
 
-            # Image preview
+            # Image preview only
             pictureView = QLabel()
             pictureView.setFixedSize(512, 384)
             rgb = cv2.cvtColor(self.captured_frame, cv2.COLOR_BGR2RGB)
@@ -671,47 +739,17 @@ class MainWindow(QMainWindow):
             qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             pictureView.setPixmap(
-                pixmap.scaled(pictureView.size(),
-                              Qt.AspectRatioMode.KeepAspectRatio,
-                              Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(
+                    pictureView.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
             )
-
-            # Right side layout (text + button stacked vertically)
-            right_layout = QVBoxLayout()
-
-            extractedTextBox = QTextEdit()
-            extractedTextBox.setFixedSize(191, 271)
-            extractedTextBox.setReadOnly(True)
-            print("[DEBUG] extractedTextBox created for tab")
-            # Store reference on tab
-            tab.extractedTextBox = extractedTextBox
-
-            # If pending response exists, display it
-            if hasattr(self, "pendingResponse") and self.pendingResponse is not None:
-                if isinstance(self.pendingResponse, dict):
-                    text = "\n".join(f"{k}: {v}" for k, v in self.pendingResponse.items())
-                else:
-                    text = str(self.pendingResponse)
-
-                extractedTextBox.setPlainText(text)
-
-                self.pendingResponse = None
-            else:
-                extractedTextBox.setPlainText("Sample extracted text will appear here.")
-            # Download button (centered)
-            downloadBtn = QPushButton("Download as File")
-            downloadBtn.setFixedSize(121, 41)
-            downloadBtn.clicked.connect(
-                lambda _, tb=extractedTextBox: self.download_text(tb, "captured_image")
-            )
-            right_layout.addWidget(extractedTextBox)
-            right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
             layout.addWidget(pictureView)
-            layout.addLayout(right_layout)
-
             self.reviewTabWidget.addTab(tab, "Captured Image")
 
+        # --- Add captured front/back tabs (image only) ---
         for frame_attr, tab_label in (("captured_front_frame", "Front Capture"),
                                       ("captured_back_frame", "Back Capture")):
             if not hasattr(self, frame_attr):
@@ -729,30 +767,18 @@ class MainWindow(QMainWindow):
             qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             pictureView.setPixmap(
-                pixmap.scaled(pictureView.size(),
-                              Qt.AspectRatioMode.KeepAspectRatio,
-                              Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(
+                    pictureView.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
             )
 
-            right_layout = QVBoxLayout()
-            extractedTextBox = QTextEdit()
-            extractedTextBox.setFixedSize(191, 271)
-            extractedTextBox.setReadOnly(True)
-            extractedTextBox.setPlainText("Sample extracted text will appear here.")
-            tab.extractedTextBox = extractedTextBox
-
-            downloadBtn = QPushButton("Download as File")
-            downloadBtn.setFixedSize(121, 41)
-            downloadBtn.clicked.connect(
-                lambda _, tb=extractedTextBox, name=tab_label: self.download_text(tb, name)
-            )
-            right_layout.addWidget(extractedTextBox)
-            right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
             layout.addWidget(pictureView)
-            layout.addLayout(right_layout)
             self.reviewTabWidget.addTab(tab, tab_label)
 
-        # --- Add uploaded files as tabs ---
+        # --- Add uploaded files as image-only tabs ---
+        # --- Add uploaded files as image-only tabs ---
         for file in self.uploaded_files:
             path = file.get("path")
             frame = cv2.imread(path)
@@ -770,44 +796,14 @@ class MainWindow(QMainWindow):
             qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             pictureView.setPixmap(
-                pixmap.scaled(pictureView.size(),
-                              Qt.AspectRatioMode.KeepAspectRatio,
-                              Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(
+                    pictureView.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
             )
-
-            right_layout = QVBoxLayout()
-            extractedTextBox = QTextEdit()
-            extractedTextBox.setFixedSize(191, 271)
-            extractedTextBox.setReadOnly(True)
-            print("[DEBUG] extractedTextBox created for tab2")
-            # Store reference on tab
-            tab.extractedTextBox = extractedTextBox
-
-            # If pending response exists, display it
-            if hasattr(self, "pendingResponse") and self.pendingResponse is not None:
-                if isinstance(self.pendingResponse, dict):
-                    text = "\n".join(f"{k}: {v}" for k, v in self.pendingResponse.items())
-                else:
-                    text = str(self.pendingResponse)
-
-                extractedTextBox.setPlainText(text)
-
-                # Clear pending (so it doesn't repeat)
-                self.pendingResponse = None
-            else:
-                extractedTextBox.setPlainText("Sample extracted text will appear here.")
-
-            downloadBtn = QPushButton("Download as File")
-            downloadBtn.setFixedSize(121, 41)
-            downloadBtn.clicked.connect(
-                lambda _, tb=extractedTextBox, fname=file["name"]: self.download_text(tb, fname)
-            )
-            right_layout.addWidget(extractedTextBox)
-            right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
             layout.addWidget(pictureView)
-            layout.addLayout(right_layout)
-
             self.reviewTabWidget.addTab(tab, file["name"])
 
     def _add_file_tab(self, file_info, tab_name):
@@ -836,20 +832,9 @@ class MainWindow(QMainWindow):
         # Right side layout (text + button stacked vertically)
         right_layout = QVBoxLayout()
 
-        extractedTextBox = QTextEdit()
-        extractedTextBox.setFixedSize(191, 271)
-        extractedTextBox.setReadOnly(True)
-        extractedTextBox.setPlainText("Sample extracted text will appear here.")
-        tab.extractedTextBox = extractedTextBox  # store reference
 
-        downloadBtn = QPushButton("Download as File")
-        downloadBtn.setFixedSize(121, 41)
-        downloadBtn.clicked.connect(
-            lambda _, tb=extractedTextBox, fname=file_info["name"]: self.download_text(tb, fname)
-        )
 
-        right_layout.addWidget(extractedTextBox)
-        right_layout.addWidget(downloadBtn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
 
         layout.addWidget(pictureView)
         layout.addLayout(right_layout)
@@ -926,6 +911,7 @@ class MainWindow(QMainWindow):
             if self.page_flow[current] == 3:
                 self.stop_camera()
                 self.show_review_page()
+                self.pending_file = None
             return
         try:
             selected_id = self.idOption.currentText()

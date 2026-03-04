@@ -19,14 +19,16 @@ class CamHandler:
     def stop_camera(self):
         try:
             self.timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            print("[CamHandler/stop_camera] Failed to stop timer:", e)
+
         try:
             if self.cap and self.cap.isOpened():
                 self.cap.release()
                 self.cap = None
-        except Exception:
-            pass
+        except Exception as e:
+            print("[CamHandler/stop_camera] Failed to release camera:", e)
+
     def update_frame(self):
         # Safe camera read and QImage creation
         if not self.cap or not self.cap.isOpened():
@@ -90,8 +92,8 @@ class CamHandler:
         # Stop timer so preview shows captured frame
         try:
             self.timer.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            print("[CamHandler/capture_image] Failed to stop timer:", e)
 
         p.captured_frame = self.parent.current_frame.copy()
 

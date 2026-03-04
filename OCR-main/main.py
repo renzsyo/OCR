@@ -8,6 +8,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.uploadedImageView = None
+        self.backImageView = None
+        self.cameraOption = None
         self.idOption = None
         self.Form1 = None
         self.uploadOption = None
@@ -83,7 +86,8 @@ class MainWindow(QMainWindow):
         # --- Home page (page 0) routing ---
         try:
             selected_id = self.idOption.currentText()
-        except Exception:
+        except Exception as e:
+            print("[MainWindow/go_next] Failed to read idOption:", e)
             self.page_history.pop()
             return
 
@@ -110,8 +114,9 @@ class MainWindow(QMainWindow):
                 try:
                     self.frontImageView.clear()
                     self.backImageView.clear()
-                except Exception:
-                    pass
+                except Exception as e:
+                    print("[MainWindow/go_next] Failed to clear front/back image views:", e)
+
                 self.Form1.setCurrentIndex(5)
 
     @staticmethod
@@ -129,8 +134,8 @@ class MainWindow(QMainWindow):
         try:
             self.captureButtonp2.setText("Capture Image")
             self.captureButtonp3.setText("Capture Image")
-        except Exception:
-            pass
+        except Exception as e :
+            print("[MainWindow/reset_session] Failed to reset capture buttons:", e)
 
         self.front_file = None
         self.back_file = None
@@ -149,8 +154,8 @@ class MainWindow(QMainWindow):
             self.cameraView.clear()
             self.cameraView1.clear()
             self.cameraView2.clear()
-        except Exception:
-            pass
+        except Exception as e:
+            print("[MainWindow/reset_session] Failed to clear UI widgets:", e)
 
     def on_debug_toggled(self, state):
         self.debug_mode = (state == 2)
@@ -159,7 +164,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.camera.stop_camera()
         super().closeEvent(event)
-
 
 
 def main():

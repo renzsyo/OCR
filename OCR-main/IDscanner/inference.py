@@ -61,15 +61,16 @@ def decode_qr_pyzbar(image_bytes):#if opencv fails this is the backup qr decoder
         decoded = pyzbar_decode(img)
         if decoded:
             return decoded[0].data.decode()
-    except Exception:
-        pass
+    except Exception as e:
+        print("[inference/decode_qr_pyzbar] Failed to decode QR with pyzbar:", e)
     return None
 
 
 def parse_qr_data(data):
     try:
         return json.loads(data)
-    except Exception:
+    except Exception as e:
+        print("[inference/parse_qr_data] Failed to parse QR JSON, returning raw:", e)
         return {"raw": data}
 
 
@@ -116,8 +117,8 @@ def parse_mrz_from_results(results):
             "Expiry_date": fields.expiry_date,
         }
 
-    except Exception:
-        pass
+    except Exception as e :
+        print("[inference/parse_mrz_from_results] TD3 parsing failed, trying manual fallback:", e)
 
     # ---- Manual Fallback ----
     try:
@@ -142,7 +143,8 @@ def parse_mrz_from_results(results):
             "Expiry_date": None,
         }
 
-    except Exception:
+    except Exception as e:
+        print("[inference/parse_mrz_from_results] Manual fallback also failed:", e)
         return None
 
 

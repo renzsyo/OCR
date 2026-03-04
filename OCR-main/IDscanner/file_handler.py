@@ -113,8 +113,9 @@ class FileManager:
                 p.fileNameLabel.clear()
                 p.fileSizeLabel.clear()
                 p.fileStatusLabel.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/on_current_row_changed] Failed to clear file detail labels:", e)
+
     def show_list_menu(self, position):
         p = self.parent
         item = p.fileListWidget.itemAt(position)
@@ -173,8 +174,8 @@ class FileManager:
                 p.fileNameLabel.clear()
                 p.fileSizeLabel.clear()
                 p.fileStatusLabel.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/delete_selected_file] Failed to clear UI after deletion:", e)
 
     def display_file_details(self, target_label):
         p = self.parent
@@ -186,8 +187,8 @@ class FileManager:
                 p.fileNameLabel.clear()
                 p.fileSizeLabel.clear()
                 p.fileStatusLabel.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/display_file_details] Failed to clear stale UI content:", e)
             return
 
         file_info = self.uploaded_files[self.current_index]
@@ -199,8 +200,9 @@ class FileManager:
                 p.fileNameLabel.clear()
                 p.fileSizeLabel.clear()
                 p.fileStatusLabel.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/display_file_details] Failed to clear UI for missing file:", e)
+
             return
 
         frame = cv2.imread(path)
@@ -211,8 +213,8 @@ class FileManager:
                 p.fileNameLabel.clear()
                 p.fileSizeLabel.clear()
                 p.fileStatusLabel.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/display_file_details] Failed to clear UI after imread failure:", e)
             return
 
         try:
@@ -236,11 +238,11 @@ class FileManager:
                 p.fileNameLabel.setText(file_info["name"])
                 p.fileSizeLabel.setText(file_info["size"])
                 p.fileStatusLabel.setText(file_info["status"])
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/display_file_details] Failed to update file detail labels:", e)
         except Exception as e:
-            print("display_file_details error:", e)
+            print("[FileManager/display_file_details] Failed to render image preview:", e)
             try:
                 target_label.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                print("[FileManager/display_file_details] Failed to clear target label after render error:", e)

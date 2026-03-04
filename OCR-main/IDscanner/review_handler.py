@@ -22,14 +22,14 @@ class ReviewHandler:
 
         # Front/back uploaded files (NID or DL upload flow)
         if p.front_file:
-            self._add_file_tab(p.front_file, "Front Side")
+            self.add_file_tab(p.front_file, "Front Side")
         if p.back_file:
-            self._add_file_tab(p.back_file, "Back Side")
+            self.add_file_tab(p.back_file, "Back Side")
 
         # Populate the shared resultbox from pendingResponse
         if p.pendingResponse is not None:
             selected_id = p.idOption.currentText()
-            formatted = p.inference._format_pending_response(p.pendingResponse, selected_id)
+            formatted = p.inference.format_pending_response(p.pendingResponse, selected_id)
             p.resultbox.setPlainText(formatted)
             p.pendingResponse = None
             print("[DEBUG] resultbox populated from pendingResponse")
@@ -117,7 +117,7 @@ class ReviewHandler:
                 p.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
             p.pendingDebugImage = None
 
-    def _add_file_tab(self, file_info, tab_name):
+    def add_file_tab(self, file_info, tab_name):
         p = self.parent
         path = file_info.get("path")
         frame = cv2.imread(path)

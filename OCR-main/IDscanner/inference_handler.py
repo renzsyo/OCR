@@ -8,35 +8,35 @@ class InferenceHandler:
     def __init__(self, parent):
         self.parent = parent
 
-    def _run_inference_passport(self, path):
+    def run_inference_passport(self, path):
         p = self.parent
         debug = getattr(p, "debug_mode", False)
         result = scan_passport(path, debug=debug)
         p.pendingResponse = result
         p.pendingDebugImage = result.get("debug_image")
-        formatted = self._format_pending_response(result, "Passport")
-        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
+        formatted = self.format_pending_response(result, "Passport")
+        QTimer.singleShot(0, lambda: self.update_extracted_text(formatted))
         print(result)
 
-    def _run_inference_national_id(self, image):
+    def run_inference_national_id(self, image):
         p = self.parent
         result = scan_national_id(image)
         p.pendingResponse = result
-        formatted = self._format_pending_response(result, "National ID")
-        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
+        formatted = self.format_pending_response(result, "National ID")
+        QTimer.singleShot(0, lambda: self.update_extracted_text(formatted))
         print(result)
 
-    def _run_inference_driver_license(self, path):
+    def run_inference_driver_license(self, path):
         p = self.parent
         debug = getattr(p, "debug_mode", False)
         result = scan_driver_license(path, debug=debug)
         p.pendingResponse = result
         p.pendingDebugImage = result.get("debug_image")
-        formatted = self._format_pending_response(result, "Driver's License")
-        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
+        formatted = self.format_pending_response(result, "Driver's License")
+        QTimer.singleShot(0, lambda: self.update_extracted_text(formatted))
         print(result)
 
-    def _update_extracted_text(self, text):
+    def update_extracted_text(self, text):
         self.parent.extractedText.setText(text) # or whatever your text widget is
 
 
@@ -50,7 +50,7 @@ class InferenceHandler:
         frame = p.captured_frame.copy()
 
         def task():
-            self._run_inference_passport(frame)
+            self.run_inference_passport(frame)
 
             # after inference finishes, navigate on UI thread
             QTimer.singleShot(0, p.go_next)
@@ -74,7 +74,7 @@ class InferenceHandler:
             return
 
         def task():
-            self._run_inference_passport(path)
+            self.run_inference_passport(path)
             QTimer.singleShot(0, p.go_next)
 
         threading.Thread(target=task, daemon=True).start()
@@ -89,7 +89,7 @@ class InferenceHandler:
                 return
 
             def task():
-                self._run_inference_national_id(p.captured_back_frame)
+                self.run_inference_national_id(p.captured_back_frame)
                 QTimer.singleShot(0, p.go_next)
 
             threading.Thread(target=task, daemon=True).start()
@@ -102,7 +102,7 @@ class InferenceHandler:
             frame = p.captured_front_frame.copy()
 
             def task():
-                self._run_inference_driver_license(frame)
+                self.run_inference_driver_license(frame)
                 QTimer.singleShot(0, p.go_next)
 
             threading.Thread(target=task, daemon=True).start()
@@ -124,7 +124,7 @@ class InferenceHandler:
             image = cv2.imread(p.back_file["path"])
 
             def task():
-                self._run_inference_national_id(image)
+                self.run_inference_national_id(image)
                 QTimer.singleShot(0, p.go_next)
 
             threading.Thread(target=task, daemon=True).start()
@@ -133,7 +133,7 @@ class InferenceHandler:
             image = cv2.imread(p.front_file["path"])
 
             def task():
-                self._run_inference_driver_license(p.front_file["path"])
+                self.run_inference_driver_license(p.front_file["path"])
                 QTimer.singleShot(0, p.go_next)
 
             threading.Thread(target=task, daemon=True).start()
@@ -141,7 +141,7 @@ class InferenceHandler:
         else:
             QMessageBox.warning(p, "Invalid Selection", "Please select a valid ID type.")
 
-    def _format_pending_response(self, result, id_type):
+    def format_pending_response(self, result, id_type):
         print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
         try:
             if id_type == "National ID":

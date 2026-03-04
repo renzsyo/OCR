@@ -49,6 +49,8 @@ class MainWindow(QMainWindow):
             self.backButtonp3.clicked.connect(self.go_back)
             self.backButtonp4.clicked.connect(self.go_back)
             self.backButtonp5.clicked.connect(self.go_back)
+            self.debugOption.stateChanged.connect(self.on_debug_toggled)
+            print("[INIT] debugOption connected successfully")
             self.captureButtonp1.clicked.connect(self.capture_image)
             self.recaptureButtonp1.clicked.connect(self.recapture_image)
             self.captureButtonp2.clicked.connect(
@@ -63,8 +65,8 @@ class MainWindow(QMainWindow):
             self.downloadp4.clicked.connect(
                 lambda: self.download_text(self.resultbox, "extracted_text")
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print("[INIT ERROR]", e)
 
         try:
             # Use currentRowChanged so keyboard navigation also updates preview
@@ -98,13 +100,10 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _run_inference_passport(self, path):
-        result = scan_passport(path)
-        self.pendingResponse = result
-        formatted = self._format_pending_response(result, "Passport")
-        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
-        print(result)
-
+    def on_debug_toggled(self, state):
+        print("[DEBUG TOGGLE] called with state:", state)
+        self.debug_mode = (state == 2)  # 2 = Checked in Qt
+        print("[DEBUG MODE] is now:", self.debug_mode)
     def _run_inference_national_id(self, image):
         result = scan_national_id(image)
         self.pendingResponse = result
@@ -112,12 +111,25 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
         print(result)
 
-    def _run_inference_driver_license(self, path):
-        result = scan_driver_license(path)
+    def _run_inference_passport(self, path):
+        debug = getattr(self, "debug_mode", False)
+        print("[INFERENCE] debug mode:", debug)
+        result = scan_passport(path, debug=debug)
         self.pendingResponse = result
+        self.pendingDebugImage = result.get("debug_image")
+        print("[INFERENCE] pendingDebugImage:", self.pendingDebugImage)
+        formatted = self._format_pending_response(result, "Passport")
+        QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
+
+    def _run_inference_driver_license(self, path):
+        debug = getattr(self, "debug_mode", False)
+        result = scan_driver_license(path, debug=debug)
+        self.pendingResponse = result
+        self.pendingDebugImage = result.get("debug_image")
         formatted = self._format_pending_response(result, "Driver's License")
         QTimer.singleShot(0, lambda: self._update_extracted_text(formatted))
         print(result)
+
     def infer_page2_camera_passport(self):
         print("[DEBUG] infer_page2_camera_passport called")
         if not hasattr(self, "captured_frame"):
@@ -168,7 +180,7 @@ class MainWindow(QMainWindow):
 
             def task():
                 self._run_inference_national_id(self.captured_back_frame)
-                QTimer.singleShot(0, self.go_next)  # ✅ after inference
+                QTimer.singleShot(0, self.go_next)  #
 
             threading.Thread(target=task, daemon=True).start()
 
@@ -351,6 +363,8 @@ class MainWindow(QMainWindow):
             print("update_frame error:", e)
 
     def capture_image(self):
+        print("[DEBUG] capture_image called")
+        print("[DEBUG] has current_frame:", hasattr(self, "current_frame"))
         # Capture current frame and send to OCR in background
         if not hasattr(self, "current_frame"):
             return
@@ -391,6 +405,8 @@ class MainWindow(QMainWindow):
             print("capture_image display error:", e)
 
     def toggle_capture(self, frame_attr, display_label, button):
+        print("[DEBUG] toggle_capture called, frame_attr:", frame_attr)
+        print("[DEBUG] has current_frame:", hasattr(self, "current_frame"))
         selected_id = self.idOption.currentText()
         if hasattr(self,frame_attr):
             delattr(self, frame_attr)
@@ -805,7 +821,33 @@ class MainWindow(QMainWindow):
 
             layout.addWidget(pictureView)
             self.reviewTabWidget.addTab(tab, file["name"])
+        # --- Add debug bounding box image if debug mode is on ---
+        if getattr(self, "debug_mode", False) and getattr(self, "pendingDebugImage", None):
+            debug_path = self.pendingDebugImage
+            frame = cv2.imread(debug_path)
+            print("[REVIEW] debug_mode:", getattr(self, "debug_mode", False))
+            print("[REVIEW] pendingDebugImage:", getattr(self, "pendingDebugImage", None))
+            if frame is not None:
+                tab = QWidget()
+                layout = QHBoxLayout(tab)
 
+                pictureView = QLabel()
+                pictureView.setFixedSize(512, 384)
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb.shape
+                bytes_per_line = ch * w
+                qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                pixmap = QPixmap.fromImage(qimg)
+                pictureView.setPixmap(
+                    pixmap.scaled(
+                        pictureView.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                )
+                layout.addWidget(pictureView)
+                self.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
+            self.pendingDebugImage = None
     def _add_file_tab(self, file_info, tab_name):
         path = file_info.get("path")
         frame = cv2.imread(path)
@@ -831,11 +873,6 @@ class MainWindow(QMainWindow):
 
         # Right side layout (text + button stacked vertically)
         right_layout = QVBoxLayout()
-
-
-
-
-
         layout.addWidget(pictureView)
         layout.addLayout(right_layout)
 

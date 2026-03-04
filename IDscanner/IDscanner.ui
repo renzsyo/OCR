@@ -184,7 +184,7 @@
        <string>Continue</string>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox">
+     <widget class="QCheckBox" name="debugOption">
       <property name="geometry">
        <rect>
         <x>340</x>

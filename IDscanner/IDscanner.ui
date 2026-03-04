@@ -27,7 +27,9 @@
   </property>
   <property name="styleSheet">
    <string notr="true">QMainWindow {
-    background-color: #FFFFFF;
+	font: 9pt &quot;Sylfaen&quot;;
+	font: 9pt &quot;Inter&quot;;
+    background-color: #FFF8F0;
 }
 
 QPushButton {
@@ -61,7 +63,7 @@ QPushButton#backButtonp5 {
 }
 QComboBox#idOption {
     background-color: #FFFFFF;
-    border: 1px solid #D4B896;
+    border: 1px solid #000000;
     border-radius: 8px;
     padding: 4px 8px;
     color: #333333;
@@ -70,11 +72,12 @@ QComboBox#idOption {
 QComboBox#idOption:hover {
     border: 1px solid #C4A882;
 }
+
 QComboBox#idOption::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
     width: 20px;
-    border-left: 1px solid #D4B896;
+    border: none;
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
 }
@@ -84,7 +87,17 @@ QComboBox#idOption::down-arrow {
     width: 12px;
     height: 12px;
 }
-
+QLabel#cameraView,
+QLabel#uploadedImageView,
+QLabel#cameraView1,
+QLabel#cameraView2,
+QLabel#frontImageView,
+QLabel#backImageView {
+    border: 2px solid #000001;
+}
+QWidget {
+    font-family: &quot;Montserrat&quot;;
+}
 </string>
   </property>
   <widget class="QWidget" name="centralwidget">
@@ -97,8 +110,13 @@ QComboBox#idOption::down-arrow {
       <height>611</height>
      </rect>
     </property>
+    <property name="font">
+     <font>
+      <family>Montserrat</family>
+     </font>
+    </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>4</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QLabel" name="label">
@@ -125,6 +143,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>12</pointsize>
        </font>
       </property>
@@ -137,17 +156,18 @@ QComboBox#idOption::down-arrow {
        <rect>
         <x>510</x>
         <y>220</y>
-        <width>141</width>
+        <width>221</width>
         <height>20</height>
        </rect>
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>12</pointsize>
        </font>
       </property>
       <property name="text">
-       <string>Upload File</string>
+       <string>Upload File </string>
       </property>
      </widget>
      <widget class="QLabel" name="label_3">
@@ -187,6 +207,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>12</pointsize>
        </font>
       </property>
@@ -228,6 +249,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>20</pointsize>
         <bold>true</bold>
        </font>
@@ -446,6 +468,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <bold>true</bold>
        </font>
       </property>
@@ -469,12 +492,25 @@ QComboBox#idOption::down-arrow {
        <string>Debug Mode</string>
       </property>
      </widget>
+     <widget class="QLabel" name="label_10">
+      <property name="geometry">
+       <rect>
+        <x>530</x>
+        <y>260</y>
+        <width>101</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>(Recommended)</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QWidget" name="page_2">
      <widget class="QLabel" name="label_5">
       <property name="geometry">
        <rect>
-        <x>560</x>
+        <x>570</x>
         <y>80</y>
         <width>141</width>
         <height>41</height>
@@ -482,6 +518,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>15</pointsize>
         <bold>true</bold>
        </font>
@@ -493,7 +530,7 @@ QComboBox#idOption::down-arrow {
      <widget class="QLabel" name="label_11">
       <property name="geometry">
        <rect>
-        <x>540</x>
+        <x>550</x>
         <y>110</y>
         <width>191</width>
         <height>16</height>
@@ -508,9 +545,15 @@ QComboBox#idOption::down-arrow {
        <rect>
         <x>570</x>
         <y>180</y>
-        <width>110</width>
-        <height>30</height>
+        <width>121</width>
+        <height>41</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Capture Image</string>
@@ -521,9 +564,15 @@ QComboBox#idOption::down-arrow {
        <rect>
         <x>570</x>
         <y>280</y>
-        <width>110</width>
-        <height>30</height>
+        <width>121</width>
+        <height>41</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Recapture Image</string>
@@ -548,11 +597,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="continuep2">
       <property name="geometry">
        <rect>
-        <x>340</x>
-        <y>520</y>
-        <width>91</width>
+        <x>190</x>
+        <y>530</y>
+        <width>371</width>
         <height>31</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Continue</string>
@@ -569,6 +624,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>-1</pointsize>
        </font>
       </property>
@@ -582,13 +638,14 @@ QComboBox#idOption::down-arrow {
       <property name="geometry">
        <rect>
         <x>570</x>
-        <y>70</y>
+        <y>80</y>
         <width>131</width>
         <height>41</height>
        </rect>
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>15</pointsize>
         <bold>true</bold>
        </font>
@@ -600,11 +657,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="uploadButtonp3">
       <property name="geometry">
        <rect>
-        <x>570</x>
+        <x>560</x>
         <y>440</y>
-        <width>141</width>
+        <width>151</width>
         <height>30</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Upload Another Image</string>
@@ -636,9 +699,9 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="continuep3">
       <property name="geometry">
        <rect>
-        <x>340</x>
+        <x>190</x>
         <y>530</y>
-        <width>91</width>
+        <width>371</width>
         <height>31</height>
        </rect>
       </property>
@@ -671,13 +734,14 @@ QComboBox#idOption::down-arrow {
       <property name="geometry">
        <rect>
         <x>310</x>
-        <y>10</y>
+        <y>0</y>
         <width>141</width>
         <height>51</height>
        </rect>
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>15</pointsize>
         <bold>true</bold>
        </font>
@@ -694,6 +758,12 @@ QComboBox#idOption::down-arrow {
         <width>171</width>
         <height>61</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Scan Another Image/File</string>
@@ -738,14 +808,33 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="downloadp4">
       <property name="geometry">
        <rect>
-        <x>580</x>
+        <x>570</x>
         <y>460</y>
-        <width>121</width>
+        <width>131</width>
         <height>41</height>
        </rect>
       </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
+      </property>
       <property name="text">
        <string>Download as Text</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_17">
+      <property name="geometry">
+       <rect>
+        <x>240</x>
+        <y>40</y>
+        <width>271</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Here are the key information extracted by the app</string>
       </property>
      </widget>
     </widget>
@@ -766,7 +855,7 @@ QComboBox#idOption::down-arrow {
      <widget class="QLabel" name="cameraView1">
       <property name="geometry">
        <rect>
-        <x>40</x>
+        <x>20</x>
         <y>170</y>
         <width>331</width>
         <height>321</height>
@@ -779,11 +868,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="continuep5">
       <property name="geometry">
        <rect>
-        <x>330</x>
+        <x>320</x>
         <y>530</y>
         <width>121</width>
         <height>41</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Continue</string>
@@ -800,6 +895,7 @@ QComboBox#idOption::down-arrow {
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>20</pointsize>
         <bold>true</bold>
        </font>
@@ -824,11 +920,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="captureButtonp2">
       <property name="geometry">
        <rect>
-        <x>150</x>
-        <y>470</y>
+        <x>120</x>
+        <y>500</y>
         <width>111</width>
         <height>41</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Capture Image</string>
@@ -837,11 +939,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="captureButtonp3">
       <property name="geometry">
        <rect>
-        <x>520</x>
-        <y>470</y>
+        <x>513</x>
+        <y>500</y>
         <width>111</width>
         <height>41</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Capture Image</string>
@@ -863,8 +971,8 @@ QComboBox#idOption::down-arrow {
      <widget class="QLabel" name="label_13">
       <property name="geometry">
        <rect>
-        <x>90</x>
-        <y>130</y>
+        <x>70</x>
+        <y>90</y>
         <width>231</width>
         <height>71</height>
        </rect>
@@ -876,11 +984,16 @@ QComboBox#idOption::down-arrow {
      <widget class="QLabel" name="label_14">
       <property name="geometry">
        <rect>
-        <x>450</x>
-        <y>130</y>
+        <x>460</x>
+        <y>90</y>
         <width>231</width>
         <height>71</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+       </font>
       </property>
       <property name="text">
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;span style=&quot; font-size:14pt; font-weight:700;&quot;&gt;Back Side of the ID&lt;/span&gt;&lt;/p&gt;&lt;p align=&quot;center&quot;&gt;Capture an Image of the Back Side of the ID&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -904,7 +1017,7 @@ QComboBox#idOption::down-arrow {
      <widget class="QLabel" name="frontImageView">
       <property name="geometry">
        <rect>
-        <x>40</x>
+        <x>30</x>
         <y>170</y>
         <width>301</width>
         <height>301</height>
@@ -930,11 +1043,17 @@ QComboBox#idOption::down-arrow {
      <widget class="QPushButton" name="uploadFrontButton">
       <property name="geometry">
        <rect>
-        <x>130</x>
+        <x>110</x>
         <y>480</y>
-        <width>121</width>
-        <height>41</height>
+        <width>131</width>
+        <height>51</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Upload Front Side
@@ -944,11 +1063,17 @@ Image</string>
      <widget class="QPushButton" name="uploadBackButton">
       <property name="geometry">
        <rect>
-        <x>510</x>
+        <x>511</x>
         <y>480</y>
         <width>121</width>
-        <height>41</height>
+        <height>51</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <bold>true</bold>
+       </font>
       </property>
       <property name="text">
        <string>Upload Back Side
@@ -960,12 +1085,13 @@ Image</string>
        <rect>
         <x>290</x>
         <y>30</y>
-        <width>181</width>
-        <height>51</height>
+        <width>178</width>
+        <height>36</height>
        </rect>
       </property>
       <property name="font">
        <font>
+        <family>Montserrat</family>
         <pointsize>20</pointsize>
         <bold>true</bold>
        </font>
@@ -990,7 +1116,7 @@ Image</string>
      <widget class="QLabel" name="label_15">
       <property name="geometry">
        <rect>
-        <x>80</x>
+        <x>60</x>
         <y>90</y>
         <width>231</width>
         <height>71</height>
@@ -1003,7 +1129,7 @@ Image</string>
      <widget class="QLabel" name="label_16">
       <property name="geometry">
        <rect>
-        <x>450</x>
+        <x>454</x>
         <y>90</y>
         <width>231</width>
         <height>71</height>

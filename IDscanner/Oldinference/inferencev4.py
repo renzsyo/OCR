@@ -353,4 +353,5 @@ def scan_driver_license(image, debug=False):
         result["Driverslicense/OCR"] = extract_license_fields(rec_texts, rec_scores)
         result["valid"] = len(result["Driverslicense/OCR"]) > 0
 
+
     return {"parsed": result, "raw": None, "debug_image": debug_image_path}

@@ -50,7 +50,6 @@ class MainWindow(QMainWindow):
             self.backButtonp4.clicked.connect(self.go_back)
             self.backButtonp5.clicked.connect(self.go_back)
             self.debugOption.stateChanged.connect(self.on_debug_toggled)
-            print("[INIT] debugOption connected successfully")
             self.captureButtonp1.clicked.connect(self.capture_image)
             self.recaptureButtonp1.clicked.connect(self.recapture_image)
             self.captureButtonp2.clicked.connect(
@@ -323,17 +322,31 @@ class MainWindow(QMainWindow):
             pass
 
     def update_frame(self):
-        # Safe camera read and QImage creation
         if not self.cap or not self.cap.isOpened():
             return
         ret, frame = self.cap.read()
         if not ret or frame is None:
             return
         try:
-            # Keep a copy for capture
             self.current_frame = frame.copy()
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Draw guide rectangle on display frame (not on captured frame)
+            display_frame = frame.copy()
+            h, w = display_frame.shape[:2]
+
+            # ID card guide box — centered, proportional to ID card aspect ratio
+            box_w = int(w * 0.75)
+            box_h = int(box_w / 1.586)  # standard ID aspect ratio 85.6mm x 53.98mm
+            x1 = (w - box_w) // 2
+            y1 = (h - box_h) // 2
+            x2 = x1 + box_w
+            y2 = y1 + box_h
+
+            cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(display_frame, "Align ID within the box", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+            rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb.shape
             bytes_per_line = ch * w
             qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
@@ -350,7 +363,6 @@ class MainWindow(QMainWindow):
                 view = getattr(self, view_name, None)
                 if view is None:
                     continue
-
                 if frozen_attr and hasattr(self, frozen_attr):
                     continue
                 scaled = pixmap.scaled(
@@ -706,27 +718,14 @@ class MainWindow(QMainWindow):
             default_name + ".txt",
             "Text Files (*.txt)"
         )
-
-        if path:
+        if not path:
+            return
+        try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             QMessageBox.information(self, "Saved", f"File saved to:\n{path}")
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Extracted Text",
-            f"{default_name}.txt",
-            "Text Files (*.txt)",
-        )
-        if not file_path:
-            return
-
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(text)
-            QMessageBox.information(self, "Saved", "Text saved to device.")
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Could not save text file: {e}")
+            QMessageBox.warning(self, "Error", f"Could not save file: {e}")
 
     def show_review_page(self):
         self.reviewTabWidget.clear()

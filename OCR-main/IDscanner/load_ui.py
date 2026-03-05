@@ -1,8 +1,11 @@
 from PyQt6 import uic
 from PyQt6.QtCore import Qt
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import MainWindow
 
 class UiLoader:
-    def __init__(self, parent):
+    def __init__(self, parent: "MainWindow") -> None:
         uic.loadUi("IDscanner\\IDscanner.ui", parent)
 
         try:
@@ -12,7 +15,7 @@ class UiLoader:
 
         self.connect_signals(parent)
 
-    def connect_signals(self, p):
+    def connect_signals(self, p: "MainWindow") -> None:
         try:
             from PyQt6.QtWidgets import QStyledItemDelegate
             from PyQt6.QtCore import QSize
@@ -46,10 +49,10 @@ class UiLoader:
 
         # Inference
         for name, slot in [
-            ("continuep2", p.inference.infer_page2_camera_passport),
-            ("continuep3", p.inference.infer_page3_upload_passport),
-            ("continuep5", p.inference.infer_page5),
-            ("continuep6", p.inference.infer_page6),
+            ("continuep2", p.go_next),
+            ("continuep3", p.go_next),
+            ("continuep5", p.go_next),
+            ("continuep6", p.go_next),
         ]:
             try:
                 getattr(p, name).clicked.connect(slot)
@@ -81,7 +84,7 @@ class UiLoader:
 
         # Upload
         try:
-            p.uploadButtonp3.clicked.connect(lambda: p.files.upload_image(p.uploadedImageView))
+            p.uploadButtonp3.clicked.connect(lambda: p.files.upload_image(p.uploadedImageView, None))
         except Exception as e:
             print("[UiLoader/connect_signals] Failed to connect uploadButtonp3:", e)
         try:

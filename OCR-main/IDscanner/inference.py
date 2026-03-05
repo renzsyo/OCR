@@ -1,10 +1,5 @@
-import cv2
+import cv2, json, re, os, io
 import numpy as np
-import json
-import re
-import os
-import io
-
 from PIL import Image
 from pyzbar.pyzbar import decode as pyzbar_decode
 from paddleocr import PaddleOCR
@@ -49,13 +44,13 @@ ocr = PaddleOCR(
     #)
 
     #return cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
-def decode_qr_opencv(image): #Used first to decode qr first before pyzbar
+def decode_qr_opencv(image: np.ndarray) -> str | None: #Used first to decode qr first before pyzbar
     detector = cv2.QRCodeDetector()
     data, _, _ = detector.detectAndDecode(image)
     return data if data else None
 
 
-def decode_qr_pyzbar(image_bytes):#if opencv fails this is the backup qr decoder
+def decode_qr_pyzbar(image_bytes: bytes) -> str | None:#if opencv fails this is the backup qr decoder
     try:
         img = Image.open(io.BytesIO(image_bytes))
         decoded = pyzbar_decode(img)
@@ -66,7 +61,7 @@ def decode_qr_pyzbar(image_bytes):#if opencv fails this is the backup qr decoder
     return None
 
 
-def parse_qr_data(data):
+def parse_qr_data(data: str) -> dict:
     try:
         return json.loads(data)
     except Exception as e:
@@ -74,7 +69,7 @@ def parse_qr_data(data):
         return {"raw": data}
 
 
-def sanitize_mrz_line(line, length=44):
+def sanitize_mrz_line(line: str, length: int = 44) -> str:
     line = re.sub(r'[^A-Z0-9<]', '<', line.upper())
     line = re.sub(r'<[A-Z]<', '<<', line)
     line = re.sub(r'<[A-Z]$', '<', line)
@@ -85,8 +80,8 @@ def sanitize_mrz_line(line, length=44):
     return line.ljust(length, '<')[:length]
 
 
-def parse_mrz_from_results(results):
-    mrz_candidates = []
+def parse_mrz_from_results(results: list[dict]) -> dict | None:
+    mrz_candidates: list[str] = []
 
     for res in results:
         for text in res.get("rec_texts", []):
@@ -152,7 +147,7 @@ def parse_mrz_from_results(results):
 # DRIVER LICENSE FIELD EXTRACTION
 # ====================================================
 
-def normalize_text(text):
+def normalize_text(text: str) -> str:
     return (
         text.replace("O", "0")
             .replace("I", "1")
@@ -161,7 +156,7 @@ def normalize_text(text):
     )
 
 
-def find_nearest_date_any_direction(cleaned, start_index, max_distance=6):
+def find_nearest_date_any_direction(cleaned: list[str], start_index: int, max_distance: int = 6) -> str | None:
     for distance in range(1, max_distance + 1):
 
         if start_index + distance < len(cleaned):
@@ -179,7 +174,7 @@ def find_nearest_date_any_direction(cleaned, start_index, max_distance=6):
     return None
 
 
-def extract_license_fields(rec_texts, rec_scores):
+def extract_license_fields(rec_texts: list[str], rec_scores: list[float]) -> dict[str, str]:
     cleaned = [t.strip() for t, s in zip(rec_texts, rec_scores) if s >= 0.75]
 
     fields = {}
@@ -229,7 +224,7 @@ def extract_license_fields(rec_texts, rec_scores):
 
     for i, t in enumerate(cleaned):
         if "ADDRESS" in t.upper():
-            address_lines = []
+            address_lines: list[str] = []
 
             # Start collecting from next line
             j = i + 1
@@ -268,7 +263,7 @@ def extract_license_fields(rec_texts, rec_scores):
                     fields["Expiration Date"] = match.group(2)
                 break
     return fields
-def draw_bounding_boxes(image, ocr_results):
+def draw_bounding_boxes(image: np.ndarray, ocr_results: list[dict]) -> np.ndarray:
     debug_img = image.copy()
     if not ocr_results:
         return debug_img
@@ -290,12 +285,97 @@ def draw_bounding_boxes(image, ocr_results):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
     return debug_img
+def extract_national_id_front_fields(rec_texts: list[str], rec_scores:list[float]) -> dict[str, str]:
+    cleaned_pairs = [(t.strip(), s) for t, s in zip(rec_texts, rec_scores)]
+    texts = [t for t, s in cleaned_pairs]
+    scores = [s for t, s in cleaned_pairs]
+    fields = {}
 
+    for i, t in enumerate(texts):
+        upper = t.upper()
+
+        # PCN
+        if re.fullmatch(r"\d{4}-\d{4}-\d{4}-\d{4}", t):
+            fields["PCN"] = t
+
+        # Last Name - must contain APELYIDO but NOT GITNANG
+        if ("APELYIDO" in upper or "LAST NAME" in upper) and "GITNANG" not in upper:
+            if i + 1 < len(texts):
+                fields["Last Name"] = texts[i + 1].strip()
+
+        # Given Names
+        if "GIVEN" in upper or ("PANGALAN" in upper and "PAMBANSANG" not in upper):
+            if i + 1 < len(texts):
+                fields["First Name"] = texts[i + 1].strip()
+
+        # Middle Name
+        if "GITNANG" in upper or "MIDDLE NAME" in upper:
+            if i + 1 < len(texts):
+                fields["Middle Name"] = texts[i + 1].strip()
+
+        # Date of Birth
+        if "DATE OF BIRTH" in upper or "KAPANGANAKAN" in upper:
+            if i + 1 < len(texts):
+                fields["DOB"] = texts[i + 1].strip()
+
+        # Address - stop on known labels OR low confidence score
+        if "ADDRESS" in upper or "TIRAHAN" in upper:
+            address_lines = []
+            j = i + 1
+            while j < len(texts):
+                next_line = texts[j]
+                next_score = scores[j]
+
+                # Stop on low confidence
+                if next_score < 0.90:
+                    break
+
+                # Stop on known labels
+                if any(kw in next_line.upper() for kw in [
+                    "APELYIDO", "PANGALAN", "GITNANG", "KAPANGANAKAN",
+                    "TIRAHAN", "DATE", "LAST NAME", "GIVEN", "MIDDLE", "ADDRESS"
+                ]):
+                    break
+
+                address_lines.append(next_line.strip())
+                j += 1
+
+            if address_lines:
+                fields["Address"] = " ".join(address_lines)
+
+    return fields
 # ====================================================
 # PUBLIC FUNCTIONS (Called in main.py)
 # ====================================================
+def scan_national_id_front(image: np.ndarray | str, debug: bool = False) -> dict:
+    if isinstance(image, str):
+        image = cv2.imread(image)
+    if image is None:
+        return {"parsed": {"NationalID/Front": None, "valid": False}, "raw": None, "debug_image": None}
 
-def scan_national_id(image):
+    result = {"NationalID/Front": {}, "valid": False}
+    ocr_results = ocr.predict(image)
+
+    debug_image_path = None
+    if debug and ocr_results:
+        debug_img = draw_bounding_boxes(image, ocr_results)
+        debug_image_path = "debug_national_id_front.png"
+        cv2.imwrite(debug_image_path, debug_img)
+
+    if ocr_results and len(ocr_results) > 0:
+        data = ocr_results[0]
+        rec_texts = data.get("rec_texts", [])
+        rec_scores = data.get("rec_scores", [])
+        result["NationalID/Front"] = extract_national_id_front_fields(rec_texts, rec_scores)
+        result["valid"] = len(result["NationalID/Front"]) > 0
+
+    return {"parsed": result, "raw": None, "debug_image": debug_image_path}
+
+
+
+def scan_national_id(image: np.ndarray | str) -> dict:
+    if isinstance(image, str):
+        image = cv2.imread(image)
     if image is None:
         return {"error": "invalid image"}
 
@@ -313,7 +393,7 @@ def scan_national_id(image):
 
     return result
 
-def scan_passport(image, debug=False):
+def scan_passport(image: np.ndarray | str, debug: bool = False) -> dict:
     # convert path string to numpy array if needed
     if isinstance(image, str):
         image = cv2.imread(image)
@@ -324,7 +404,7 @@ def scan_passport(image, debug=False):
     result = {"Passport/MRZ": None, "valid": False}
     ocr_results = ocr.predict(image)
 
-    debug_image_path = None
+    debug_image_path: str | None = None
     if debug and ocr_results:
         debug_img = draw_bounding_boxes(image, ocr_results)
         debug_image_path = "debug_passport.png"
@@ -337,7 +417,7 @@ def scan_passport(image, debug=False):
     return {"parsed": result, "raw": None, "debug_image": debug_image_path}
 
 
-def scan_driver_license(image, debug=False):
+def scan_driver_license(image: np.ndarray | str, debug: bool =False) -> dict:
     if isinstance(image, str):
         image = cv2.imread(image)
     if image is None:
@@ -346,7 +426,7 @@ def scan_driver_license(image, debug=False):
     result = {"Driverslicense/OCR": {}, "valid": False}
     ocr_results = ocr.predict(image)
 
-    debug_image_path = None
+    debug_image_path: str | None = None
     if debug and ocr_results:
         debug_img = draw_bounding_boxes(image, ocr_results)
         debug_image_path = "debug_license.png"

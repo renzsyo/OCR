@@ -1,16 +1,21 @@
 import os, shutil, cv2
-from PyQt6.QtWidgets import QFileDialog, QMessageBox, QMenu
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFileDialog, QMessageBox, QMenu, QLabel
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import MainWindow
 
 class FileManager:
-    def __init__(self, parent):
+    def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
         self.uploaded_files = []
         self.current_index = -1
 
-    def upload_image(self, target_label, side=None):
+    def upload_image(self, target_label: QLabel, side: str|None) -> None:
+        print('Upload image start')
         p = self.parent
+
         file_paths, _ = QFileDialog.getOpenFileNames(
             p,
             "Select ID Images",
@@ -72,12 +77,24 @@ class FileManager:
                         Qt.TransformationMode.SmoothTransformation,
                     )
                 )
-
+            # Auto-trigger inference after upload (single image / passport)
+            if side is None:
+                p.continuep3.setEnabled(False)
+                QTimer.singleShot(100, p.inference.infer_page3_upload_passport)
+            if side in ("front", "back"):
+                selected_id = p.idOption.currentText()
+                if selected_id == "Driver's License" and p.front_file and p.back_file:
+                    p.continuep6.setEnabled(False)
+                    QTimer.singleShot(100, p.inference.infer_only_driver_license_upload)
+                if selected_id == "National ID" and p.front_file and p.back_file:
+                    p.continuep6.setEnabled(False)
+                    QTimer.singleShot(100, p.inference.infer_only_national_id_upload)
+            print('Upload image end')
         except Exception as e:
             print("Upload failed:", e)
             QMessageBox.warning(p, "Upload Error", f"Upload failed: {e}")
 
-    def refresh_file_list(self):
+    def refresh_file_list(self) -> None:
         p = self.parent
         try:
             p.fileListWidget.clear()
@@ -93,14 +110,14 @@ class FileManager:
         except Exception as e:
             print("refresh_file_list error:", e)
 
-    def list_item_clicked(self, item):
+    def list_item_clicked(self, item) -> None:
         p = self.parent
         row = p.fileListWidget.row(item)
         if 0 <= row < len(self.uploaded_files):
             self.current_index = row
             self.display_file_details(p.uploadedImageView)
 
-    def on_current_row_changed(self, row):
+    def on_current_row_changed(self, row: int) -> None:
         p = self.parent
         if 0 <= row < len(self.uploaded_files):
             self.current_index = row
@@ -116,11 +133,11 @@ class FileManager:
             except Exception as e:
                 print("[FileManager/on_current_row_changed] Failed to clear file detail labels:", e)
 
-    def show_list_menu(self, position):
+    def show_list_menu(self, position) -> None:
         p = self.parent
         item = p.fileListWidget.itemAt(position)
         menu = QMenu(p)
-
+        print("LIST")
         if item is None:
             # Clicked empty area: optionally show actions like "Add files"
             add_action = menu.addAction("Add files")
@@ -143,7 +160,7 @@ class FileManager:
         if action == delete_action:
             self.delete_selected_file()
 
-    def delete_selected_file(self):
+    def delete_selected_file(self) -> None:
         p = self.parent
         row = p.fileListWidget.currentRow()
         if row < 0 or row >= len(self.uploaded_files):
@@ -177,7 +194,7 @@ class FileManager:
             except Exception as e:
                 print("[FileManager/delete_selected_file] Failed to clear UI after deletion:", e)
 
-    def display_file_details(self, target_label):
+    def display_file_details(self, target_label: QLabel) -> None:
         p = self.parent
 
         if self.current_index < 0 or self.current_index >= len(self.uploaded_files):

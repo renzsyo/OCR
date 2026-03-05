@@ -1,22 +1,26 @@
 import cv2, time
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import QLabel, QPushButton
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import MainWindow
 
 class CamHandler:
-    def __init__(self, parent):
+    def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
         self.cap = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
 
-    def start_camera(self):
+    def start_camera(self) -> None:
         if not self.cap or not self.cap.isOpened():
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.timer.start(30)
 
-    def stop_camera(self):
+    def stop_camera(self) -> None:
         try:
             self.timer.stop()
         except Exception as e:
@@ -29,7 +33,7 @@ class CamHandler:
         except Exception as e:
             print("[CamHandler/stop_camera] Failed to release camera:", e)
 
-    def update_frame(self):
+    def update_frame(self) -> None:
         # Safe camera read and QImage creation
         if not self.cap or not self.cap.isOpened():
             return
@@ -83,7 +87,7 @@ class CamHandler:
         except Exception as e:
             print("update_frame error:", e)
 
-    def capture_image(self):
+    def capture_image(self) -> None:
         p = self.parent
         # Capture current frame and send to OCR in background
         if not hasattr(self.parent, "current_frame"):
@@ -117,17 +121,19 @@ class CamHandler:
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 ))
+                p.continuep2.setEnabled(False)
+                QTimer.singleShot(100, p.inference.infer_page2_camera_passport)
         except Exception as e:
             print("capture_image display error:", e)
 
-    def recapture_image(self):
+    def recapture_image(self) -> None:
         p = self.parent
         if hasattr(p, "captured_frame"):
             del p.captured_frame
 
         self.start_camera()
 
-    def toggle_capture(self, frame_attr, display_label, button):
+    def toggle_capture(self, frame_attr: str, display_label: QLabel, button: QPushButton) -> None:
         p = self.parent
         selected_id = p.idOption.currentText()
         if hasattr(p,frame_attr):
@@ -157,3 +163,12 @@ class CamHandler:
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             ))
+            selected_id = p.idOption.currentText()
+            if selected_id == "Driver's License":
+                if hasattr(p, "captured_front_frame") and hasattr(p, "captured_back_frame"):
+                    p.continuep5.setEnabled(False)
+                    QTimer.singleShot(100, p.inference.infer_only_driver_license_camera)
+            if selected_id == "National ID":
+                if hasattr(p, "captured_front_frame") and hasattr(p, "captured_back_frame"):
+                    p.continuep5.setEnabled(False)
+                    QTimer.singleShot(100, p.inference.infer_only_national_id_camera)

@@ -1,12 +1,12 @@
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "IDscanner"))
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt6.QtCore import Qt
+sys.path.insert(0, os.path.join(os.path.dirname(_file_), "IDscanner"))
 from IDscanner import CamHandler, FileManager, InferenceHandler, ReviewHandler, UiLoader
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
         self.uploadedImageView = None
         self.backImageView = None
         self.cameraOption = None
@@ -20,14 +20,13 @@ class MainWindow(QMainWindow):
         self.debug_mode: bool = False
         self.pendingDebugImage: str | None = None
         self.current_frame = None
-
+        self.lastResult: dict | None = None
+        self.lastIdType: str | None = None
         self.camera = CamHandler(self)
         self.files = FileManager(self)
         self.inference = InferenceHandler(self)
         self.review = ReviewHandler(self)
-
         UiLoader(self)
-
         self.page_flow: dict[int, int] = {
             1: 3,
             2: 3,
@@ -43,12 +42,9 @@ class MainWindow(QMainWindow):
 
         current = self.Form1.currentIndex()
         prev_page = self.page_history.pop()
-
         if current == 3 or prev_page == 0:
             self.reset_session()
-
         self.Form1.setCurrentIndex(prev_page)
-
 
     def go_next(self) -> None:
         current = self.Form1.currentIndex()
@@ -113,7 +109,6 @@ class MainWindow(QMainWindow):
                 self.camera.stop_camera()
                 self.review.show_review_page()
             return
-
         # --- Home page (page 0) routing ---
         try:
             selected_id = self.idOption.currentText()
@@ -147,7 +142,6 @@ class MainWindow(QMainWindow):
                     self.backImageView.clear()
                 except Exception as e:
                     print("[MainWindow/go_next] Failed to clear front/back image views:", e)
-
                 self.Form1.setCurrentIndex(5)
 
     @staticmethod
@@ -155,7 +149,6 @@ class MainWindow(QMainWindow):
         folder = os.path.join("IDscanner/output", category.strip(), subfolder)
         os.makedirs(folder, exist_ok=True)
         return folder
-
 
     def reset_session(self) -> None:
         print("[reset_session] called")
@@ -175,7 +168,8 @@ class MainWindow(QMainWindow):
         self.files.current_index = -1
         self.pendingResponse = None
         self.pendingDebugImage = None
-
+        self.lastResult: dict | None = None
+        self.lastIdType: str | None = None
         self.camera.stop_camera()
         for widget_name in [
             "uploadedImageView", "fileListWidget", "fileNameLabel",
@@ -201,9 +195,5 @@ def main() -> None:
     window.show()
     sys.exit(app.exec())
 
-
 if __name__ == "__main__":
     main()
-
-
-

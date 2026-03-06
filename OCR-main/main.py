@@ -1,6 +1,6 @@
 import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "IDscanner"))
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
-from PyQt6.QtCore import Qt
 from IDscanner import CamHandler, FileManager, InferenceHandler, ReviewHandler, UiLoader
 
 class MainWindow(QMainWindow):
@@ -34,7 +34,6 @@ class MainWindow(QMainWindow):
             4: 3,
             5: 3,
             3: 0,
-            6: 0,
         }
         self.page_history: list[int] = []
 

@@ -1,4 +1,4 @@
-import cv2, time, threading, os
+import time, threading, os
 import numpy as np
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
@@ -38,12 +38,6 @@ class InferenceHandler:
             p.continuep5.setEnabled(True)
             p.continuep6.setEnabled(True)
 
-    def reenable_buttons(self) -> None:
-        p = self.parent
-        print("[InferenceHandler] re-enabling buttons")
-        p.continuep2.setEnabled(True)
-        p.continuep3.setEnabled(True)
-
     def run_inference_passport(self, path: np.ndarray | str) -> None:
 
         p = self.parent
@@ -75,7 +69,6 @@ class InferenceHandler:
         }
         p.pendingDebugImage = front_result.get("debug_image")
 
-        formatted = self.format_pending_response(p.pendingResponse, "National ID")
         print(p.pendingResponse)
         self.ni_inference_complete = True
 
@@ -85,13 +78,8 @@ class InferenceHandler:
         result = scan_driver_license(path, debug=debug)
         p.pendingResponse = result
         p.pendingDebugImage = result.get("debug_image")
-        formatted = self.format_pending_response(result, "Driver's License")
         print(result)
         self.dl_inference_complete = True  #
-
-    def update_extracted_text(self, text: str) -> None:
-        self.parent.extractedText.setText(text) # or whatever your text widget is
-
 
     def infer_page2_camera_passport(self) -> None:
         p = self.parent
@@ -133,23 +121,24 @@ class InferenceHandler:
         print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
         try:
             if id_type == "National ID":
-                data = result.get("qr", {}).get("NationalID/QR", {})  # ✅ updated path
-                subject = data.get("subject", {})
-                front_fields = result.get("front", {}).get("parsed", {}).get("NationalID/Front", {})
+                data = result.get("qr", {}).get("NationalID/QR") or {}
+                subject = data.get("subject") or {}
+                front_fields = result.get("front", {}).get("parsed", {}).get("NationalID/Front", {}) or {}
+                # Fall back to front OCR fields when QR subject is empty
                 return (
                     f"👤 PERSONAL INFORMATION\n"
                     f"{'─' * 23}\n"
-                    f"  Last Name   : {subject.get('lName', 'N/A')}\n"
-                    f"  First Name  : {subject.get('fName', 'N/A')}\n"
-                    f"  Middle Name : {subject.get('mName', 'N/A')}\n"
-                    f"  Suffix      : {subject.get('Suffix', 'N/A') or 'None'}\n"
+                    f"  Last Name   : {subject.get('lName') or front_fields.get('Last Name', 'N/A')}\n"
+                    f"  First Name  : {subject.get('fName') or front_fields.get('First Name', 'N/A')}\n"
+                    f"  Middle Name : {subject.get('mName') or front_fields.get('Middle Name', 'N/A')}\n"
+                    f"  Suffix      : {subject.get('Suffix') or 'None'}\n"
                     f"  Sex         : {subject.get('sex', 'N/A')}\n"
-                    f"  Birthday    : {subject.get('DOB', 'N/A')}\n"
+                    f"  Birthday    : {subject.get('DOB') or front_fields.get('DOB', 'N/A')}\n"
                     f"  Birthplace  : {subject.get('POB', 'N/A')}\n\n"
                     f"  Address     : {front_fields.get('Address', 'N/A')}\n\n"
                     f"  ID DETAILS\n"
                     f"{'─' * 23}\n"
-                    f"  PCN         : {subject.get('PCN', 'N/A')}\n"
+                    f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n"
                     f"  Issuer      : {data.get('Issuer', 'N/A')}\n"
                     f"  Date Issued : {data.get('DateIssued', 'N/A')}\n\n"
                 )
@@ -309,28 +298,34 @@ class InferenceHandler:
     def validate_national_id_result_sync(self, result: dict) -> bool:
         p = self.parent
         try:
-            # ✅ Check QR was scanned
-            qr = result.get("qr", {})
-            if not qr.get("valid", False):
-                QMessageBox.warning(p, "QR Scan Failed",
-                                    "No QR code was detected on the back.\n\nPlease recapture or re-upload.")
-                return False
-
-            # ✅ Check front OCR extracted something
+            qr_valid = result.get("qr", {}).get("valid", False)
             front_fields = result.get("front", {}).get("parsed", {}).get("NationalID/Front", {})
-            if not front_fields or not front_fields.get("PCN"):
+            front_valid = bool(front_fields and front_fields.get("PCN"))
+
+            # Front OCR must have worked — that is always required
+            if not front_valid:
                 QMessageBox.warning(p, "Front Scan Failed",
                                     "Could not extract data from the front.\n\nPlease recapture or re-upload.")
                 return False
 
-            # Check match
-            match = result.get("match", {})
-            if not match.get("passed", False):
-                mismatches = match.get("mismatches", [])
-                mismatch_text = "\n".join(mismatches)
-                QMessageBox.warning(p, "ID Verification Failed",
-                                    f"Front and back data do not match:\n\n{mismatch_text}\n\nPlease recapture or re-upload.")
-                return False
+            # If QR also succeeded, check that front and back data match
+            if qr_valid:
+                match = result.get("match", {})
+                if not match.get("passed", False):
+                    mismatches = match.get("mismatches", [])
+                    mismatch_text = "\n".join(mismatches)
+                    QMessageBox.warning(p, "ID Verification Failed",
+                                        f"Front and back data do not match:\n\n{mismatch_text}\n\nPlease recapture or re-upload.")
+                    return False
+            else:
+                # QR failed but front OCR worked — warn the user but allow proceed
+                reply = QMessageBox.warning(p, "QR Not Detected",
+                    "The QR code on the back could not be read.\n\n"
+                    "Front data was extracted successfully.\n\n"
+                    "Do you want to continue with front data only?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply != QMessageBox.StandardButton.Yes:
+                    return False
 
             return True
 
@@ -342,7 +337,7 @@ class InferenceHandler:
     def match_national_id(qr_result: dict, front_result: dict) -> dict:
         mismatches: list[str] = []
         try:
-            qr_subject = qr_result.get("NationalID/QR", {}).get("subject", {})
+            qr_subject = (qr_result.get("NationalID/QR") or {}).get("subject") or {}
             front_fields = front_result.get("parsed", {}).get("NationalID/Front", {})
 
             if not qr_subject or not front_fields:

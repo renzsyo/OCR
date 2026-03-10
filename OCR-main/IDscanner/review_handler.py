@@ -2,8 +2,8 @@ import cv2
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QTextEdit, QPushButton, QFileDialog, QMessageBox,
+    QWidget, QHBoxLayout, QLabel,
+    QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 class ReviewHandler:
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
-        self._last_result: dict | None = None
-        self._last_id_type: str | None = None
     @staticmethod
     def frame_to_tab(frame) -> QWidget:
         tab = QWidget()

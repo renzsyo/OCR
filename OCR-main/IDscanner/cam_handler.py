@@ -1,4 +1,4 @@
-import cv2, time, sys,os
+import cv2, time
 import numpy as np
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -28,9 +28,9 @@ class CamHandler:
 
     def start_camera(self) -> None:
         if MVSDK_AVAILABLE:
-            self._mv_start()
+            self.mv_start()
         else:
-            self._cv_start()
+            self.cv_start()
         self.timer.start(30)
 
     def stop_camera(self) -> None:
@@ -40,11 +40,11 @@ class CamHandler:
             print("[CamHandler/stop_camera] Failed to stop timer:", e)
 
         if MVSDK_AVAILABLE:
-            self._mv_stop()
+            self.mv_stop()
         else:
-            self._cv_stop()
+            self.cv_stop()
 
-    def _mv_start(self) -> None:
+    def mv_start(self) -> None:
         if self._mv_handle is not None:
             return
 
@@ -52,7 +52,7 @@ class CamHandler:
             device_list = mvsdk.CameraEnumerateDevice()
             if not device_list:
                 print("[CamHandler/_mv_start] No MindVision camera found.")
-                self._cv_start()
+                self.cv_start()
                 return
             device_info = device_list[0]
             handle = mvsdk.CameraInit(device_info, -1, -1)
@@ -75,9 +75,9 @@ class CamHandler:
         except mvsdk.CameraException as e:
             print("[CamHandler/_mv_start] SDK error:", e.error_code, e.message)
             self._mv_handle = None
-            self._cv_start()
+            self.cv_start()
 
-    def _mv_stop(self) -> None:
+    def mv_stop(self) -> None:
         try:
             if self._mv_handle is not None:
                 mvsdk.CameraStop(self._mv_handle)
@@ -93,7 +93,7 @@ class CamHandler:
         except Exception as e:
             print("[CamHandler/_mv_stop] Failed to free MV buffer:", e)
 
-    def _mv_read_frame(self) -> np.ndarray | None:
+    def mv_read_frame(self) -> np.ndarray | None:
         if self._mv_handle is None or self._mv_buffer is None:
             return None
         try:
@@ -111,13 +111,13 @@ class CamHandler:
                 print("[CamHandler/_mv_read_frame] SDK error:", e.error_code, e.message)
             return None
 
-    def _cv_start(self) -> None:
+    def cv_start(self) -> None:
         if not self.cap or not self.cap.isOpened():
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    def _cv_stop(self) -> None:
+    def cv_stop(self) -> None:
         try:
             if self.cap and self.cap.isOpened():
                 self.cap.release()
@@ -125,19 +125,19 @@ class CamHandler:
         except Exception as e:
             print("[CamHandler/_cv_stop] Failed to release OpenCV camera", e)
 
-    def _cv_read_frame(self) -> np.ndarray | None:
+    def cv_read_frame(self) -> np.ndarray | None:
         if not self.cap or not self.cap.isOpened():
             return None
         ret, frame = self.cap.read()
         return frame if ret and frame is not None else None
 
-    def _read_frame(self) -> np.ndarray | None:
+    def read_frame(self) -> np.ndarray | None:
         if MVSDK_AVAILABLE and self._mv_handle is not None:
-            return self._mv_read_frame()
-        return self._cv_read_frame()
+            return self.mv_read_frame()
+        return self.cv_read_frame()
 
     def update_frame(self) -> None:
-        frame = self._read_frame()
+        frame = self.read_frame()
         if frame is None:
             return
 

@@ -1,8 +1,11 @@
-import time, threading, os
+import cv2, time, threading, os
 import numpy as np
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
-from .inference import scan_passport, scan_national_id, scan_driver_license, scan_national_id_front
+from .inference import (
+    scan_passport, scan_national_id, scan_driver_license,
+    scan_national_id_front, classify_id_type,
+)
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import MainWindow
@@ -15,10 +18,10 @@ class InferenceHandler:
         self.dl_inference_complete = False
         self.ni_inference_complete = False  # ✅
 
-        self._watch_timer = QTimer()
-        self._watch_timer.setInterval(100)
-        self._watch_timer.timeout.connect(self._check_inference_done)
-        self._watch_timer.start()
+        self.watch_timer = QTimer()
+        self.watch_timer.setInterval(100)
+        self.watch_timer.timeout.connect(self._check_inference_done)
+        self.watch_timer.start()
 
     def _check_inference_done(self) -> None:
         p = self.parent
@@ -33,15 +36,43 @@ class InferenceHandler:
             p.continuep5.setEnabled(True)
             p.continuep6.setEnabled(True)
 
-        if self.ni_inference_complete:  # ✅
+        if self.ni_inference_complete:
             self.ni_inference_complete = False
             p.continuep5.setEnabled(True)
             p.continuep6.setEnabled(True)
 
-    def run_inference_passport(self, path: np.ndarray | str) -> None:
+    def _classify_check(self, image: np.ndarray, expected_type: str) -> str:
+        """
+        Run the classifier on an image and return the ID type to use.
+        - If the classifier is confident and agrees with the user selection → use it.
+        - If the classifier is confident but DISAGREES → log a warning, auto-correct
+          the dropdown, and return the classifier's answer.
+        - If the classifier is not confident (or unavailable) → trust the user selection.
+        """
+        predicted, confidence = classify_id_type(image)
+        if predicted is None:
+            # Not confident enough or model unavailable — trust the user
+            return expected_type
+        if predicted != expected_type:
+            print(f"[Classifier] WARNING: selected='{expected_type}' but "
+                  f"model says '{predicted}' ({confidence:.2%}) — auto-correcting.")
+            try:
+                idx = self.parent.idOption.findText(predicted)
+                if idx >= 0:
+                    self.parent.idOption.setCurrentIndex(idx)
+            except Exception:
+                pass
+            return predicted
+        print(f"[Classifier] Confirmed: '{predicted}' ({confidence:.2%})")
+        return predicted
 
+    def run_inference_passport(self, path: np.ndarray | str) -> None:
         p = self.parent
         debug = getattr(p, "debug_mode", False)
+        # Run classifier on the image to confirm it's a passport
+        image = cv2.imread(path) if isinstance(path, str) else path
+        if image is not None:
+            self._classify_check(image, "Passport")
         result = scan_passport(path, debug=debug)
         p.pendingResponse = result
         p.pendingDebugImage = result.get("debug_image")
@@ -51,6 +82,15 @@ class InferenceHandler:
     def run_inference_national_id(self, front_image: np.ndarray | str, back_image: np.ndarray | str) -> None:
         p = self.parent
         debug = getattr(p, "debug_mode", False)
+        # Run classifier on the front image (face/text side) to confirm ID type
+        front_arr = cv2.imread(front_image) if isinstance(front_image, str) else front_image
+        if front_arr is not None:
+            detected = self._classify_check(front_arr, "National ID")
+            # If classifier says Driver's License, reroute automatically
+            if detected == "Driver's License":
+                print("[Classifier] Rerouting to Driver's License inference.")
+                self.run_inference_driver_license(front_image)
+                return
 
         qr_result = scan_national_id(back_image)
         print("[NationalID] QR result:", qr_result)
@@ -69,15 +109,26 @@ class InferenceHandler:
         }
         p.pendingDebugImage = front_result.get("debug_image")
 
+        formatted = self.format_pending_response(p.pendingResponse, "National ID")
         print(p.pendingResponse)
         self.ni_inference_complete = True
 
     def run_inference_driver_license(self, path: np.ndarray | str) -> None:
         p = self.parent
         debug = getattr(p, "debug_mode", False)
+        # Run classifier to confirm ID type
+        image = cv2.imread(path) if isinstance(path, str) else path
+        if image is not None:
+            detected = self._classify_check(image, "Driver's License")
+            # If classifier says National ID, reroute automatically
+            if detected == "National ID":
+                print("[Classifier] Rerouting to National ID inference.")
+                self.run_inference_national_id(path, path)
+                return
         result = scan_driver_license(path, debug=debug)
         p.pendingResponse = result
         p.pendingDebugImage = result.get("debug_image")
+        formatted = self.format_pending_response(result, "Driver's License")
         print(result)
         self.dl_inference_complete = True  #
 

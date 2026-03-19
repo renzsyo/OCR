@@ -1,0 +1,16 @@
+# Secret files
+.env
+
+# Python auto-generated files
+__pycache__/
+*.pyc
+*.pth
+
+# PyCharm files
+.idea/
+
+# Output folders
+output/
+
+# Zip files
+*.zip

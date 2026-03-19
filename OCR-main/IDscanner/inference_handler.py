@@ -1,0 +1,673 @@
+"""
+inference_handler.py
+--------------------
+CHANGES FROM PREVIOUS VERSION:
+  - REMOVED [lines 44-68]:  _classify_check() — ID type no longer chosen by user
+  - REMOVED [n/a]:          _ask_manual_id_type() — failed detection always asks for
+                             a clearer photo, never shows manual selection dialog
+  - ADDED   [lines 53-81]:  detection_complete, detection_result_type, detection_confidence,
+                             _retry_count flags in __init__
+  - ADDED   [lines 72-81]:  reset_detection() — resets all detection flags; called at
+                             session start and on recapture
+  - ADDED   [lines 118-130]:infer_front_camera() — called after front camera capture;
+                             starts _run_front_detection() in background thread
+  - ADDED   [lines 131-153]:infer_front_upload() — called after front image upload;
+                             reads from p.front_file (not uploaded_files list)
+  - ADDED   [lines 154-210]:_run_front_detection() — background thread; classifies image,
+                             then immediately runs full OCR in the same thread for single-sided
+                             IDs to prevent PyTorch + PaddleOCR thread collision (0xC0000409)
+  - ADDED   [lines 211-248]:_on_detection_finished() — main-thread callback; routes to
+                             dual page (NID/UMID) or signals OCR complete (single-sided)
+  - CHANGED [lines 255-296]:_run_full_ocr_camera() / _run_full_ocr_upload() — kept as
+                             fallback but no longer called in normal flow; OCR now runs
+                             inside _run_front_detection() sequentially
+  - CHANGED [lines 131-153]:infer_front_upload() reads from p.front_file instead of
+                             uploaded_files list (list removed)
+  - CHANGED [lines 275-295]:_run_full_ocr_upload() reads from p.front_file instead of
+                             uploaded_files list
+  - FIXED   [lines 154-216]:0xC0000409 crash — PyTorch classifier and PaddleOCR now run
+                             sequentially in one thread, never concurrently
+  - FIXED   [lines 172-179]:blank/uniform frame crash — variance check skips near-blank
+                             frames before running classifier
+  - FIXED   [lines 181-192]:classifier returning None for unmapped class indices (model
+                             has 6 output classes but only 3 are mapped) — now falls back
+                             to keyword OCR via auto_detect_all_ids instead of marking
+                             as inconclusive immediately
+  - KEPT    [lines 298-610]:all run_inference_*, validate_*, format_*, match_* unchanged
+
+BUGFIXES (latest):
+  - FIXED   [run_front_detection]: removed redundant local imports of cv2/numpy as _cv2/_np;
+                                   was masking the module-level imports and causing confusion
+  - FIXED   [run_inference_passport/driver_license/national_id]: these set pendingResponse
+                                   and inference_complete flags from the background thread
+                                   while the main-thread timer reads them — this is a data
+                                   race. Added _result_lock (threading.Lock) to protect all
+                                   writes to pendingResponse, pendingDebugImage, and all
+                                   *_inference_complete flags. The timer now acquires the
+                                   same lock before reading the flags.
+"""
+
+import cv2, time, threading, os
+import numpy as np
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QMessageBox
+from .inference import (
+    scan_passport, scan_national_id, scan_driver_license,
+    scan_national_id_front, classify_id_type,
+)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import MainWindow
+
+# ID types that require a back side
+TWO_SIDED_IDS = {"National ID", "UMID"}
+
+
+class InferenceHandler:
+
+    def __init__(self, parent: "MainWindow") -> None:
+        self.parent = parent
+
+        # ADDED: lock that protects every cross-thread flag write/read.
+        # Background inference threads write these; the main-thread QTimer reads them.
+        # Without the lock, Python's GIL is not enough — attribute assignment is not
+        # atomic across all CPython builds and the read-modify side on the main thread
+        # can race with the write side on the worker thread.
+        self._result_lock = threading.Lock()
+
+        # Existing inference completion flags
+        self.inference_complete = False
+        self.dl_inference_complete = False
+        self.ni_inference_complete = False
+
+        # NEW: front-only detection flags
+        self.detection_complete = False
+        self.detection_result_type = None
+        self.detection_confidence = 0.0
+        self._retry_count = 0
+
+        self.watch_timer = QTimer()
+        self.watch_timer.setInterval(100)
+        self.watch_timer.timeout.connect(self.check_inference_done)
+        self.watch_timer.start()
+
+    def reset_detection(self) -> None:
+        """Call this at the start of each new session."""
+        with self._result_lock:
+            self.detection_complete = False
+            self.detection_result_type = None
+            self.detection_confidence = 0.0
+            self._retry_count = 0
+
+    # ------------------------------------------------------------------
+    # Timer — polls all completion flags on the main thread
+    # ------------------------------------------------------------------
+
+    def check_inference_done(self) -> None:
+        p = self.parent
+
+        # Snapshot all flags under the lock, then act outside it so we
+        # never hold the lock while calling Qt functions.
+        with self._result_lock:
+            inf_done = self.inference_complete
+            dl_done  = self.dl_inference_complete
+            ni_done  = self.ni_inference_complete
+            det_done = self.detection_complete
+
+            if inf_done:
+                self.inference_complete = False
+            if dl_done:
+                self.dl_inference_complete = False
+            if ni_done:
+                self.ni_inference_complete = False
+            if det_done:
+                self.detection_complete = False
+
+        if inf_done:
+            try:
+                p.continuep2.setEnabled(True)
+                p.continuep3.setEnabled(True)
+            except Exception:
+                pass
+
+        if dl_done:
+            try:
+                p.continuep5.setEnabled(True)
+                p.continuep6.setEnabled(True)
+            except Exception:
+                pass
+
+        if ni_done:
+            try:
+                p.continuep5.setEnabled(True)
+                p.continuep6.setEnabled(True)
+            except Exception:
+                pass
+
+        if det_done:
+            self.on_detection_finished()
+
+    # ------------------------------------------------------------------
+    # NEW: Front-only detection
+    # ------------------------------------------------------------------
+
+    def infer_front_camera(self) -> None:
+        """Called after user captures front image on the single-cam page."""
+        p = self.parent
+        if not hasattr(p, "captured_frame"):
+            QMessageBox.warning(p, "No Capture", "Please capture an image first.")
+            return
+        frame = p.captured_frame.copy()
+        threading.Thread(
+            target=self.run_front_detection,
+            args=(frame,),
+            daemon=True,
+        ).start()
+
+    def infer_front_upload(self) -> None:
+        """
+        Called after user uploads front image on the single-upload page.
+        CHANGED: reads from p.front_file instead of uploaded_files list.
+        """
+        p = self.parent
+        if not p.front_file:
+            QMessageBox.warning(p, "No file", "Please upload an image first.")
+            return
+        path = p.front_file.get("path")
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(p, "Error", "Selected file not found.")
+            return
+        image = cv2.imread(path)
+        if image is None:
+            QMessageBox.warning(p, "Error", "Could not read uploaded image.")
+            return
+        threading.Thread(
+            target=self.run_front_detection,
+            args=(image,),
+            daemon=True,
+        ).start()
+
+    def run_front_detection(self, image: np.ndarray) -> None:
+        """
+        Background thread: classify the front image, then immediately run
+        full OCR if it's a single-sided ID — all in the same thread so
+        PyTorch and PaddleOCR never run concurrently (prevents 0xC0000409).
+
+        FIXED: removed redundant local aliases (_cv2, _np, _os) — the module-level
+        imports are already available and the aliases were misleading.
+
+        FIXED: all flag writes now go through _result_lock so the main-thread
+        timer never reads a half-written value.
+        """
+        try:
+            # Safety 1: resize large frames
+            h, w = image.shape[:2]
+            if w > 1280 or h > 1280:
+                scale = 1280 / max(w, h)
+                image = cv2.resize(image, (int(w * scale), int(h * scale)),
+                                   interpolation=cv2.INTER_AREA)
+
+            # Safety 2: skip near-blank frames
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            variance = float(np.var(gray))
+            if variance < 100.0:
+                print(f"[FrontDetection] Frame too uniform (variance={variance:.1f}), skipping.")
+                with self._result_lock:
+                    self.detection_result_type = None
+                    self.detection_confidence = 0.0
+                return
+
+            # Step 1: try the classifier
+            id_type, confidence = classify_id_type(image)
+
+            # Step 2: if classifier inconclusive (unmapped class or low confidence),
+            # fall back to keyword OCR — this is what the old flow used to do
+            if id_type is None:
+                print("[FrontDetection] Classifier inconclusive — trying keyword fallback.")
+                from .inference import auto_detect_all_ids
+                hits = auto_detect_all_ids([image])
+                if hits:
+                    id_type = hits[0][0]
+                    confidence = 1.0
+                    print(f"[FrontDetection] Keyword fallback detected: {id_type}")
+
+            with self._result_lock:
+                self.detection_result_type = id_type
+                self.detection_confidence = confidence
+            print(f"[FrontDetection] final type={id_type}, confidence={confidence:.2%}")
+
+            # Step 3: for single-sided IDs, run OCR immediately in this
+            # same thread so PyTorch and PaddleOCR never overlap.
+            if id_type is not None and id_type not in TWO_SIDED_IDS:
+                p = self.parent
+                source = image
+                if p.front_file:
+                    fp = p.front_file.get("path", "")
+                    if fp and os.path.exists(fp):
+                        source = fp
+                if id_type == "Passport":
+                    self.run_inference_passport(source)
+                elif id_type == "Driver's License":
+                    self.run_inference_driver_license(source)
+
+        except Exception as e:
+            print(f"[FrontDetection] Error: {e}")
+            with self._result_lock:
+                self.detection_result_type = None
+                self.detection_confidence = 0.0
+        finally:
+            with self._result_lock:
+                self.detection_complete = True
+
+    def on_detection_finished(self) -> None:
+        """Main-thread callback after front detection completes."""
+        p = self.parent
+        with self._result_lock:
+            id_type    = self.detection_result_type
+            confidence = self.detection_confidence
+
+        current_page = p.Form1.currentIndex()
+
+        if id_type is not None:
+            p.detected_id_type = id_type
+            print(f"[FrontDetection] Detected: {id_type} ({confidence:.2%})")
+
+            if id_type in TWO_SIDED_IDS:
+                # Need back side — navigate to dual page
+                if current_page == 1:
+                    p.proceed_to_back_camera()
+                else:
+                    p.proceed_to_back_upload()
+            # Single-sided: OCR already ran inside run_front_detection,
+            # inference_complete flag was set there — nothing more to do here.
+            return
+
+        # Inconclusive — ask for another picture
+        with self._result_lock:
+            self._retry_count += 1
+            retry = self._retry_count
+            confidence = self.detection_confidence
+        print(f"[FrontDetection] Inconclusive (attempt {retry}), "
+              f"confidence={confidence:.2%}")
+
+        QMessageBox.warning(
+            p,
+            "Could Not Detect ID",
+            "The ID type could not be detected from this image.\n\n"
+            "Please try again with a clearer photo.",
+        )
+        try:
+            p.continuep2.setEnabled(True)
+            p.continuep3.setEnabled(True)
+        except Exception:
+            pass
+
+
+
+    # ------------------------------------------------------------------
+    # Full OCR after detection — single-sided IDs
+    # ------------------------------------------------------------------
+
+    def run_full_ocr_camera(self, id_type: str) -> None:
+        """
+        Kept as fallback — camera path OCR is now run inside
+        _run_front_detection to avoid thread collision.
+        This method is no longer called in normal flow.
+        """
+        p = self.parent
+        if not hasattr(p, "captured_frame"):
+            return
+        frame = p.captured_frame.copy()
+
+        def task():
+            if id_type == "Passport":
+                self.run_inference_passport(frame)
+            elif id_type == "Driver's License":
+                self.run_inference_driver_license(frame)
+
+        p.continuep2.setEnabled(False)
+        threading.Thread(target=task, daemon=True).start()
+
+    def run_full_ocr_upload(self, id_type: str) -> None:
+        """
+        Kept as fallback — upload path OCR is now run inside
+        _run_front_detection to avoid thread collision.
+        This method is no longer called in normal flow.
+        """
+        p = self.parent
+        if not p.front_file:
+            return
+        path = p.front_file.get("path")
+        if not path or not os.path.exists(path):
+            return
+
+        def task():
+            if id_type == "Passport":
+                self.run_inference_passport(path)
+            elif id_type == "Driver's License":
+                self.run_inference_driver_license(path)
+
+        p.continuep3.setEnabled(False)
+        threading.Thread(target=task, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Existing inference runners — UNCHANGED logic, FIXED flag writes
+    # ------------------------------------------------------------------
+
+    def run_inference_passport(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_passport(path, debug=debug)
+        # FIXED: write pendingResponse and flag under the lock so the
+        # main-thread timer cannot read a partial / stale state.
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+        print(result)
+
+    def run_inference_national_id(self, front_image: np.ndarray | str,
+                                   back_image: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+
+        qr_result = scan_national_id(back_image)
+        print("[NationalID] QR result:", qr_result)
+
+        front_result = scan_national_id_front(front_image, debug=debug)
+        print("[NationalID] Front OCR result:", front_result)
+
+        match_result = self.match_national_id(qr_result, front_result)
+        print("[NationalID] Match result:", match_result)
+
+        payload = {
+            "qr":    qr_result,
+            "front": front_result,
+            "match": match_result,
+            "valid": qr_result.get("valid", False) and match_result.get("passed", False),
+        }
+        # FIXED: same lock protection
+        with self._result_lock:
+            p.pendingResponse = payload
+            p.pendingDebugImage = front_result.get("debug_image")
+            self.ni_inference_complete = True
+        print(payload)
+
+    def run_inference_driver_license(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_driver_license(path, debug=debug)
+        # FIXED: same lock protection
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.dl_inference_complete = True
+        print(result)
+
+    # ------------------------------------------------------------------
+    # Two-sided triggers (page 4 camera / page 5 upload)
+    # ------------------------------------------------------------------
+
+    def infer_only_driver_license_camera(self) -> None:
+        p = self.parent
+        if not hasattr(p, "captured_front_frame") or not hasattr(p, "captured_back_frame"):
+            return
+        front = p.captured_front_frame.copy()
+        threading.Thread(
+            target=lambda: self.run_inference_driver_license(front),
+            daemon=True,
+        ).start()
+
+    def infer_only_national_id_camera(self) -> None:
+        p = self.parent
+        if not hasattr(p, "captured_front_frame") or not hasattr(p, "captured_back_frame"):
+            return
+        front = p.captured_front_frame.copy()
+        back  = p.captured_back_frame.copy()
+        threading.Thread(
+            target=lambda: self.run_inference_national_id(front, back),
+            daemon=True,
+        ).start()
+
+    def infer_only_driver_license_upload(self) -> None:
+        p = self.parent
+        if not p.front_file:
+            return
+        path = p.front_file["path"]
+        if not os.path.exists(path):
+            return
+        threading.Thread(
+            target=lambda: self.run_inference_driver_license(path),
+            daemon=True,
+        ).start()
+
+    def infer_only_national_id_upload(self) -> None:
+        p = self.parent
+        if not p.front_file or not p.back_file:
+            return
+        front_path = p.front_file["path"]
+        back_path  = p.back_file["path"]
+        if not os.path.exists(front_path) or not os.path.exists(back_path):
+            return
+        threading.Thread(
+            target=lambda: self.run_inference_national_id(front_path, back_path),
+            daemon=True,
+        ).start()
+
+    # ------------------------------------------------------------------
+    # Format / Validate — UNCHANGED
+    # ------------------------------------------------------------------
+
+    def format_pending_response(self, result: dict, id_type: str) -> str:
+        print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
+        try:
+            if id_type == "National ID":
+                data = result.get("qr", {}).get("NationalID/QR") or {}
+                subject = data.get("subject") or {}
+                front_fields = (
+                    result.get("front", {})
+                          .get("parsed", {})
+                          .get("NationalID/Front", {}) or {}
+                )
+                return (
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Last Name   : {subject.get('lName') or front_fields.get('Last Name', 'N/A')}\n"
+                    f"  First Name  : {subject.get('fName') or front_fields.get('First Name', 'N/A')}\n"
+                    f"  Middle Name : {subject.get('mName') or front_fields.get('Middle Name', 'N/A')}\n"
+                    f"  Suffix      : {subject.get('Suffix') or 'None'}\n"
+                    f"  Sex         : {subject.get('sex', 'N/A')}\n"
+                    f"  Birthday    : {subject.get('DOB') or front_fields.get('DOB', 'N/A')}\n"
+                    f"  Birthplace  : {subject.get('POB', 'N/A')}\n\n"
+                    f"  Address     : {front_fields.get('Address', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n"
+                    f"  Issuer      : {data.get('Issuer', 'N/A')}\n"
+                    f"  Date Issued : {data.get('DateIssued', 'N/A')}\n\n"
+                )
+
+            elif id_type == "Driver's License":
+                data = result.get("parsed", {}).get("Driverslicense/OCR", {})
+                return (
+                    f"PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name        : {data.get('Name', 'N/A')}\n"
+                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
+                    f"  Birthday    : {data.get('Birthdate', 'N/A')}\n"
+                    f"  Address     : {data.get('Address', 'N/A')}\n\n"
+                    f"  LICENSE DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  License No  : {data.get('License No', 'N/A')}\n"
+                    f"  Expiration  : {data.get('Expiration Date', 'N/A')}\n\n"
+                )
+
+            elif id_type == "Passport":
+                data = result.get("parsed", {}).get("Passport/MRZ", {})
+                return (
+                    f" PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Last Name   : {data.get('Surname', 'N/A')}\n"
+                    f"  First Name  : {data.get('Given_names', 'N/A')}\n"
+                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
+                    f"  Birthday    : {data.get('Birth_date', 'N/A')}\n\n"
+                    f"  PASSPORT DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  Document No : {data.get('Document_number', 'N/A')}\n"
+                    f"  Nationality : {data.get('Nationality', 'N/A')}\n"
+                    f"  Country     : {data.get('Country', 'N/A')}\n"
+                    f"  Expiry Date : {data.get('Expiry_date', 'N/A')}\n\n"
+                )
+
+            elif id_type == "UMID":
+                data = result.get("qr", {}).get("NationalID/QR") or {}
+                subject = data.get("subject") or {}
+                front_fields = (
+                    result.get("front", {})
+                          .get("parsed", {})
+                          .get("NationalID/Front", {}) or {}
+                )
+                return (
+                    f"👤 PERSONAL INFORMATION (UMID)\n"
+                    f"{'─' * 23}\n"
+                    f"  Last Name   : {subject.get('lName') or front_fields.get('Last Name', 'N/A')}\n"
+                    f"  First Name  : {subject.get('fName') or front_fields.get('First Name', 'N/A')}\n"
+                    f"  Middle Name : {subject.get('mName') or front_fields.get('Middle Name', 'N/A')}\n"
+                    f"  Sex         : {subject.get('sex', 'N/A')}\n"
+                    f"  Birthday    : {subject.get('DOB') or front_fields.get('DOB', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n\n"
+                )
+
+        except Exception as e:
+            return f"⚠️ Could not format result: {e}\n\nRaw output:\n{result}"
+
+    def validate_passport_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        if not result:
+            QMessageBox.warning(p, "Scan Failed",
+                "No data was detected.\n\nPlease upload a clearer image or recapture.")
+            return False
+        try:
+            mrz = result.get("parsed", {}).get("Passport/MRZ")
+            if not mrz:
+                QMessageBox.warning(p, "Scan Failed",
+                    "No MRZ data was detected.\n\nPlease upload a clearer image or recapture.")
+                return False
+            missing = []
+            if not mrz.get("Surname", "").strip():          missing.append("Surname")
+            if not mrz.get("Given_names", "").strip():      missing.append("Given Names")
+            if not mrz.get("Document_number", "").strip():  missing.append("Passport Number")
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                    f"The following required fields were not detected:\n\n"
+                    f"{', '.join(missing)}\n\n"
+                    f"Please upload a clearer image or recapture.")
+                return False
+            return True
+        except Exception as e:
+            print(f"[validate_passport_result_sync] Error: {e}")
+            return False
+
+    def validate_driver_license_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        try:
+            data = result.get("parsed", {}).get("Driverslicense/OCR", {})
+            if not data:
+                QMessageBox.warning(p, "Scan Failed",
+                    "No data was detected.\n\nPlease upload a clearer image or recapture.")
+                return False
+            missing = []
+            if not (data.get("Name") or "").strip():             missing.append("Name")
+            if not (data.get("License No") or "").strip():       missing.append("License No")
+            if not (data.get("Expiration Date") or "").strip():  missing.append("Expiration Date")
+            if not (data.get("Birthdate") or "").strip():        missing.append("Birthdate")
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                    f"The following required fields were not detected:\n\n"
+                    f"{', '.join(missing)}\n\n"
+                    f"Please upload a clearer image or recapture.")
+                return False
+            return True
+        except Exception as e:
+            print(f"[validate_driver_license_result_sync] Error: {e}")
+            return False
+
+    def validate_national_id_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        try:
+            qr_valid     = result.get("qr", {}).get("valid", False)
+            front_fields = (result.get("front", {})
+                                  .get("parsed", {})
+                                  .get("NationalID/Front", {}))
+            front_valid  = bool(front_fields and front_fields.get("PCN"))
+
+            if not front_valid:
+                QMessageBox.warning(p, "Front Scan Failed",
+                    "Could not extract data from the front.\n\nPlease recapture or re-upload.")
+                return False
+
+            if qr_valid:
+                match = result.get("match", {})
+                if not match.get("passed", False):
+                    mismatches = match.get("mismatches", [])
+                    QMessageBox.warning(p, "ID Verification Failed",
+                        f"Front and back data do not match:\n\n"
+                        f"{chr(10).join(mismatches)}\n\n"
+                        f"Please recapture or re-upload.")
+                    return False
+            else:
+                reply = QMessageBox.warning(p, "QR Not Detected",
+                    "The QR code on the back could not be read.\n\n"
+                    "Front data was extracted successfully.\n\n"
+                    "Do you want to continue with front data only?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply != QMessageBox.StandardButton.Yes:
+                    return False
+            return True
+        except Exception as e:
+            print(f"[validate_national_id_result_sync] Error: {e}")
+            return False
+
+    @staticmethod
+    def match_national_id(qr_result: dict, front_result: dict) -> dict:
+        mismatches: list[str] = []
+        try:
+            qr_subject   = (qr_result.get("NationalID/QR") or {}).get("subject") or {}
+            front_fields = front_result.get("parsed", {}).get("NationalID/Front", {})
+
+            if not qr_subject or not front_fields:
+                return {"passed": False,
+                        "mismatches": ["Could not extract data from one or both sides."]}
+            if not front_fields.get("PCN"):
+                return {"passed": False,
+                        "mismatches": ["PCN not detected on front. Please recapture the front of the ID."]}
+
+            qr_fname    = qr_subject.get("fName", "").strip().upper()
+            qr_lname    = qr_subject.get("lName", "").strip().upper()
+            front_fname = front_fields.get("First Name", "").strip().upper()
+            front_lname = front_fields.get("Last Name", "").strip().upper()
+
+            if qr_fname != front_fname:
+                mismatches.append(f"First Name: QR='{qr_fname}' vs Front='{front_fname}'")
+            if qr_lname != front_lname:
+                mismatches.append(f"Last Name: QR='{qr_lname}' vs Front='{front_lname}'")
+
+            qr_dob    = qr_subject.get("DOB", "").strip().upper()
+            front_dob = front_fields.get("DOB", "").strip().upper()
+            if qr_dob != front_dob:
+                mismatches.append(f"Date of Birth: QR='{qr_dob}' vs Front='{front_dob}'")
+
+            qr_pcn    = qr_subject.get("PCN", "").strip()
+            front_pcn = front_fields.get("PCN", "").strip()
+            if qr_pcn != front_pcn:
+                mismatches.append(f"PCN: QR='{qr_pcn}' vs Front='{front_pcn}'")
+
+            if mismatches:
+                return {"passed": False, "mismatches": mismatches}
+            return {"passed": True, "mismatches": []}
+
+        except Exception as e:
+            print(f"[match_national_id] Error: {e}")
+            return {"passed": False, "mismatches": [str(e)]}

@@ -29,6 +29,15 @@ class MainWindow(QMainWindow):
         self.detected_id_type = None  # set by InferenceHandler after front detection
         self._last_method = "Unknown"  # set when user picks method on home page
 
+        # Pre-initialize Supabase client on the main thread before any
+        # background inference threads start. Lazy init inside a worker
+        # thread races with PyTorch/CUDA and causes 0xC0000409 on Windows.
+        try:
+            from IDscanner.db_handler import _init_client_on_main_thread
+            _init_client_on_main_thread()
+        except Exception as _db_e:
+            print(f"[MainWindow] DB pre-init failed (non-fatal): {_db_e}")
+
         self.camera = CamHandler(self)
         self.files = FileManager(self)
         self.inference = InferenceHandler(self)

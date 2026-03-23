@@ -349,7 +349,7 @@ class CamHandler:
             fh, fw      = raw_frame.shape[:2]
             x1, y1      = max(0, x1), max(0, y1)
             x2, y2      = min(fw, x2), min(fh, y2)
-            crop        = raw_frame[y1:y2, x1:x2]
+            crop = raw_frame[y1:y2, x1:x2].copy()
             if crop.size > 0:
                 p.captured_frame = crop
                 print(f"[capture_image] Cropped to detection bbox "

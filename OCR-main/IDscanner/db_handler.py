@@ -24,16 +24,31 @@ BUCKET_NAME = "id-scans"
 
 _client = None
 
+def _init_client_on_main_thread() -> None:
+    """
+    Call this once from the main thread at startup (before any background
+    threads run) so the Supabase/httpx/asyncio initialization never races
+    with PyTorch or PaddleOCR CUDA context on a background thread.
+    On Windows, initializing asyncio-based libraries from a worker thread
+    while CUDA is active can corrupt the process (0xC0000409).
+    """
+    global _client
+    if _client is not None:
+        return
+    try:
+        from supabase import create_client
+        _client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("[DB] Supabase client initialised.")
+    except Exception as e:
+        print(f"[DB] Failed to initialise Supabase client: {e}")
+
 def get_client():
-    #Return a cached Supabase client, initialising it on first call.
+    # Returns the cached client. Client should already be initialized
+    # via _init_client_on_main_thread() at app startup.
+    # Falls back to lazy init if called before startup (safe on main thread).
     global _client
     if _client is None:
-        try:
-            from supabase import create_client
-            _client = create_client(SUPABASE_URL, SUPABASE_KEY)
-            print("[DB] Supabase client initialised.")
-        except Exception as e:
-            print(f"[DB] Failed to initialise Supabase client: {e}")
+        _init_client_on_main_thread()
     return _client
 
 def save_scan(

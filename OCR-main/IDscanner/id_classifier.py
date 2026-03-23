@@ -37,7 +37,7 @@ from ultralytics import YOLO
 # ─────────────────────────────────────────────
 #  CONFIG — adjust paths if needed
 # ─────────────────────────────────────────────
-_CLASSIFIER_PATH = r"C:\Users\Renzo\Documents\MindVision\models\yolo_v3\yolo_final\weights\best.pt"
+_CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__),"classifybest.pt")
 _CLASS_NAMES     = ["drivers_license", "passport", "philhealth", "philid", "senior", "sss"]
 _CONF_THRESHOLD  = 0.80          # below this → class_name = "Uncertain"
 _GRADCAM_DIR     = os.path.join("IDscanner", "output", "gradcam")

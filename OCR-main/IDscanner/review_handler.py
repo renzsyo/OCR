@@ -1,9 +1,28 @@
+"""
+review_handler.py
+-----------------
+CHANGES FROM PREVIOUS VERSION:
+  - CHANGED [line 64]:      show_review_page() — selected_id now reads from
+                             detected_id_type (auto-detected) instead of
+                             p.idOption.currentText()
+  - REMOVED [lines 44-48]:  uploaded_files loop for tab display removed —
+                             passport upload now shows via p.front_file tab,
+                             consistent with NID/DL flow
+  - ADDED   [lines 76-113]: show_review_page() — after result text is populated,
+                             calls db_handler.save_scan() in a background thread
+                             to upload images to Supabase Storage and insert a
+                             record into the scans table; collects front/back paths
+                             from p.front_file, p.back_file, p._captured_front_save_path,
+                             p._captured_back_save_path; debug image found by
+                             checking standard filenames in working directory
+"""
+import os
 import cv2
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QTextEdit, QPushButton, QFileDialog, QMessageBox,
+    QWidget, QHBoxLayout, QLabel,
+    QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -11,11 +30,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import MainWindow
 
+# Pre-import at module load time (happens on main thread before CUDA loads)
+# so the supabase/httpx/asyncio init never races with CUDA on a worker thread.
+try:
+    from .db_handler import save_scan as _save_scan
+    _SUPABASE_AVAILABLE = True
+except Exception as _e:
+    print(f"[ReviewHandler] Supabase import failed: {_e}")
+    _SUPABASE_AVAILABLE = False
+
 class ReviewHandler:
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
-        self._last_result: dict | None = None
-        self._last_id_type: str | None = None
     @staticmethod
     def frame_to_tab(frame) -> QWidget:
         tab = QWidget()
@@ -42,14 +68,15 @@ class ReviewHandler:
         print("[REVIEW DEBUG] pendingDebugImage:", getattr(p, "pendingDebugImage", None))
         print("[REVIEW DEBUG] pendingResponse:", p.pendingResponse)
 
-        # Front/back uploaded files (NID or DL upload flow)
+        # Front/back files (all flows — passport upload, NID/DL upload, PDF)
         if p.front_file:
             self.add_file_tab(p.front_file, "Front Side")
         if p.back_file:
             self.add_file_tab(p.back_file, "Back Side")
 
         # Populate the shared resultbox from pendingResponse
-        selected_id = p.idOption.currentText()  # ← always defined first
+        # CHANGED: use detected_id_type (auto-detected) instead of idOption
+        selected_id = getattr(p, "detected_id_type", None) or getattr(p, "lastIdType", "Unknown")
         if p.pendingResponse is not None:
             formatted = p.inference.format_pending_response(p.pendingResponse, selected_id)
             p.resultbox.setPlainText(formatted)
@@ -57,6 +84,41 @@ class ReviewHandler:
             p.lastIdType = selected_id
             p.pendingResponse = None
             print("[DEBUG] resultbox populated from pendingResponse")
+
+            # ── Save to Supabase ──────────────────────────────────────
+            print("[DEBUG] entering supabase block")
+            if _SUPABASE_AVAILABLE:
+                try:
+                    method = getattr(p, "_last_method", "Unknown")
+                    front_path = p.front_file.get("path") if p.front_file else None
+                    back_path  = p.back_file.get("path")  if p.back_file  else None
+                    if not front_path and hasattr(p, "captured_frame"):
+                        front_path = getattr(p, "_captured_front_save_path", None)
+                    if not front_path and hasattr(p, "captured_front_frame"):
+                        front_path = getattr(p, "_captured_front_save_path", None)
+                    if not back_path and hasattr(p, "captured_back_frame"):
+                        back_path = getattr(p, "_captured_back_save_path", None)
+                    debug_path = getattr(p, "pendingDebugImage", None)
+                    if not debug_path:
+                        for fname in ("debug_passport.png", "debug_license.png",
+                                      "debug_national_id_front.png"):
+                            if os.path.exists(fname):
+                                debug_path = fname
+                                break
+                    print(f"[DEBUG] calling _save_scan front={front_path} debug={debug_path}")
+                    _save_scan(
+                        id_type     = selected_id,
+                        method      = method,
+                        result_text = formatted,
+                        front_path  = front_path,
+                        back_path   = back_path,
+                        debug_path  = debug_path,
+                    )
+                    print("[DEBUG] _save_scan returned")
+                except Exception as e:
+                    print(f"[DB] save_scan error: {e}")
+            else:
+                print("[DEBUG] supabase not available, skipping")
 
         # Single captured frame (passport camera flow)
         if hasattr(p, "captured_frame"):
@@ -71,22 +133,41 @@ class ReviewHandler:
             tab = ReviewHandler.frame_to_tab(getattr(p, frame_attr))
             p.reviewTabWidget.addTab(tab, tab_label)
 
-        # Uploaded files list (passport upload flow)
-        for file in p.files.uploaded_files:
-            path = file.get("path")
-            frame = cv2.imread(path)
-            if frame is None:
-                continue
-            tab = ReviewHandler.frame_to_tab(frame)
-            p.reviewTabWidget.addTab(tab, file["name"])
+        # Load debug and Grad-CAM images into memory NOW — before the Supabase
+        # background thread (delete_after=True) can delete the files from disk.
+        # Tab widgets are built from the in-memory arrays, so file deletion
+        # timing no longer causes a crash.
+        debug_frame   = None
+        gradcam_frame = None
+        clf_result_tab = None
 
         if getattr(p, "debug_mode", False) and getattr(p, "pendingDebugImage", None):
-            debug_path = p.pendingDebugImage
-            frame = cv2.imread(debug_path)
-            if frame is not None:
-                tab = ReviewHandler.frame_to_tab(frame)
-                p.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
-            p.pendingDebugImage = None
+            _dbg_path = p.pendingDebugImage
+            p.pendingDebugImage = None          # clear immediately
+            debug_frame = cv2.imread(_dbg_path) # None if already deleted — handled below
+
+        _gradcam_path = getattr(p, "_gradcam_path", None)
+        if _gradcam_path and os.path.exists(_gradcam_path):
+            gradcam_frame  = cv2.imread(_gradcam_path)
+            clf_result_tab = getattr(p, "_classifier_result", None)
+        # Always clear to prevent stale data bleeding into next session
+        p._gradcam_path      = None
+        p._classifier_result = None
+
+        # Build tabs from already-loaded frames
+        if debug_frame is not None:
+            tab = ReviewHandler.frame_to_tab(debug_frame)
+            p.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
+
+        if gradcam_frame is not None:
+            if clf_result_tab is not None:
+                label = f"{clf_result_tab.class_name.upper()}  {clf_result_tab.confidence:.1%}"
+                cv2.putText(gradcam_frame, label, (10, gradcam_frame.shape[0] - 15),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3)
+                cv2.putText(gradcam_frame, label, (10, gradcam_frame.shape[0] - 15),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2)
+            tab = ReviewHandler.frame_to_tab(gradcam_frame)
+            p.reviewTabWidget.addTab(tab, "Grad-CAM")
 
     def add_file_tab(self, file_info: dict, tab_name: str) -> None:
         p = self.parent

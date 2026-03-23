@@ -119,90 +119,13 @@ QWidget {
      <number>6</number>
     </property>
     <widget class="QWidget" name="page">
-     <widget class="QLabel" name="label">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>160</y>
-        <width>161</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Use the default camera to </string>
-      </property>
-     </widget>
-     <widget class="QRadioButton" name="cameraOption">
-      <property name="geometry">
-       <rect>
-        <x>480</x>
-        <y>140</y>
-        <width>181</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Montserrat</family>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Capture using camera</string>
-      </property>
-     </widget>
-     <widget class="QRadioButton" name="uploadOption">
-      <property name="geometry">
-       <rect>
-        <x>480</x>
-        <y>210</y>
-        <width>221</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Montserrat</family>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Upload Image</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_3">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>240</y>
-        <width>211</width>
-        <height>16</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Select an Existing File in the device </string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_2">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>180</y>
-        <width>161</width>
-        <height>16</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>capture an image of the id</string>
-      </property>
-     </widget>
      <widget class="QComboBox" name="idOption">
       <property name="geometry">
        <rect>
-        <x>80</x>
-        <y>140</y>
-        <width>181</width>
-        <height>31</height>
+        <x>240</x>
+        <y>220</y>
+        <width>241</width>
+        <height>41</height>
        </rect>
       </property>
       <property name="font">
@@ -219,30 +142,30 @@ QWidget {
       </property>
       <item>
        <property name="text">
-        <string>Government ID</string>
+        <string>Select Method</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>Passport</string>
+        <string>Capture Using Camera</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>National ID</string>
+        <string>Upload Image</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>Driver's License</string>
+        <string>Upload PDF</string>
        </property>
       </item>
      </widget>
      <widget class="QLabel" name="label_4">
       <property name="geometry">
        <rect>
-        <x>290</x>
-        <y>30</y>
+        <x>280</x>
+        <y>90</y>
         <width>191</width>
         <height>51</height>
        </rect>
@@ -262,8 +185,8 @@ QWidget {
      <widget class="QPushButton" name="continuep1">
       <property name="geometry">
        <rect>
-        <x>190</x>
-        <y>530</y>
+        <x>170</x>
+        <y>440</y>
         <width>371</width>
         <height>31</height>
        </rect>
@@ -457,8 +380,8 @@ QWidget {
      <widget class="QCheckBox" name="debugOption">
       <property name="geometry">
        <rect>
-        <x>340</x>
-        <y>500</y>
+        <x>320</x>
+        <y>410</y>
         <width>101</width>
         <height>20</height>
        </rect>
@@ -467,62 +390,17 @@ QWidget {
        <string>Debug Mode</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_10">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>260</y>
-        <width>101</width>
-        <height>16</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>(Recommended)</string>
-      </property>
-     </widget>
      <widget class="QLabel" name="label_18">
       <property name="geometry">
        <rect>
-        <x>90</x>
-        <y>110</y>
-        <width>181</width>
-        <height>21</height>
+        <x>140</x>
+        <y>150</y>
+        <width>471</width>
+        <height>31</height>
        </rect>
       </property>
       <property name="text">
-       <string>Choose Government ID</string>
-      </property>
-     </widget>
-     <widget class="QRadioButton" name="uploadPDFOption">
-      <property name="geometry">
-       <rect>
-        <x>480</x>
-        <y>290</y>
-        <width>221</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Montserrat</family>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Upload PDF</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_19">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>320</y>
-        <width>231</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Select an Existing PDF file in the device </string>
+       <string>Upload an existing photo of your ID or capture a new image using your camera</string>
       </property>
      </widget>
     </widget>
@@ -682,8 +560,8 @@ QWidget {
      <widget class="QPushButton" name="uploadButtonp3">
       <property name="geometry">
        <rect>
-        <x>560</x>
-        <y>440</y>
+        <x>550</x>
+        <y>310</y>
         <width>151</width>
         <height>30</height>
        </rect>
@@ -696,7 +574,7 @@ QWidget {
        </font>
       </property>
       <property name="text">
-       <string>Upload Another Image</string>
+       <string>Re-Upload Image</string>
       </property>
      </widget>
      <widget class="QLabel" name="uploadedImageView">
@@ -710,16 +588,6 @@ QWidget {
       </property>
       <property name="text">
        <string/>
-      </property>
-     </widget>
-     <widget class="QListWidget" name="fileListWidget">
-      <property name="geometry">
-       <rect>
-        <x>540</x>
-        <y>140</y>
-        <width>191</width>
-        <height>271</height>
-       </rect>
       </property>
      </widget>
      <widget class="QPushButton" name="continuep3">
@@ -752,6 +620,26 @@ QWidget {
       </property>
       <property name="text">
        <string>← Back</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="uploadButtonp4">
+      <property name="geometry">
+       <rect>
+        <x>550</x>
+        <y>220</y>
+        <width>151</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <weight>75</weight>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Upload Image</string>
       </property>
      </widget>
     </widget>
@@ -1439,7 +1327,7 @@ Image</string>
        <rect>
         <x>290</x>
         <y>20</y>
-        <width>178</width>
+        <width>191</width>
         <height>36</height>
        </rect>
       </property>
@@ -1466,6 +1354,26 @@ Image</string>
       </property>
       <property name="text">
        <string/>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="ReuploadPDF">
+      <property name="geometry">
+       <rect>
+        <x>560</x>
+        <y>460</y>
+        <width>151</width>
+        <height>30</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <weight>75</weight>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Re-Upload PDF</string>
       </property>
      </widget>
     </widget>

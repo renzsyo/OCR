@@ -1,9 +1,28 @@
+"""
+review_handler.py
+-----------------
+CHANGES FROM PREVIOUS VERSION:
+  - CHANGED [line 64]:      show_review_page() — selected_id now reads from
+                             detected_id_type (auto-detected) instead of
+                             p.idOption.currentText()
+  - REMOVED [lines 44-48]:  uploaded_files loop for tab display removed —
+                             passport upload now shows via p.front_file tab,
+                             consistent with NID/DL flow
+  - ADDED   [lines 76-113]: show_review_page() — after result text is populated,
+                             calls db_handler.save_scan() in a background thread
+                             to upload images to Supabase Storage and insert a
+                             record into the scans table; collects front/back paths
+                             from p.front_file, p.back_file, p._captured_front_save_path,
+                             p._captured_back_save_path; debug image found by
+                             checking standard filenames in working directory
+"""
+import os
 import cv2
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QTextEdit, QPushButton, QFileDialog, QMessageBox,
+    QWidget, QHBoxLayout, QLabel,
+    QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -14,8 +33,6 @@ if TYPE_CHECKING:
 class ReviewHandler:
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
-        self._last_result: dict | None = None
-        self._last_id_type: str | None = None
     @staticmethod
     def frame_to_tab(frame) -> QWidget:
         tab = QWidget()
@@ -42,14 +59,15 @@ class ReviewHandler:
         print("[REVIEW DEBUG] pendingDebugImage:", getattr(p, "pendingDebugImage", None))
         print("[REVIEW DEBUG] pendingResponse:", p.pendingResponse)
 
-        # Front/back uploaded files (NID or DL upload flow)
+        # Front/back files (all flows — passport upload, NID/DL upload, PDF)
         if p.front_file:
             self.add_file_tab(p.front_file, "Front Side")
         if p.back_file:
             self.add_file_tab(p.back_file, "Back Side")
 
         # Populate the shared resultbox from pendingResponse
-        selected_id = p.idOption.currentText()  # ← always defined first
+        # CHANGED: use detected_id_type (auto-detected) instead of idOption
+        selected_id = getattr(p, "detected_id_type", None) or getattr(p, "lastIdType", "Unknown")
         if p.pendingResponse is not None:
             formatted = p.inference.format_pending_response(p.pendingResponse, selected_id)
             p.resultbox.setPlainText(formatted)
@@ -57,6 +75,47 @@ class ReviewHandler:
             p.lastIdType = selected_id
             p.pendingResponse = None
             print("[DEBUG] resultbox populated from pendingResponse")
+
+            # ── Save to Supabase ──────────────────────────────────────
+            try:
+                from .db_handler import save_scan
+
+                # Determine input method from page history context
+                method = getattr(p, "_last_method", "Unknown")
+
+                # Collect image paths
+                front_path = p.front_file.get("path") if p.front_file else None
+                back_path  = p.back_file.get("path")  if p.back_file  else None
+
+                # Captured frames — save paths if available
+                if not front_path and hasattr(p, "captured_frame"):
+                    front_path = getattr(p, "_captured_front_save_path", None)
+                if not front_path and hasattr(p, "captured_front_frame"):
+                    front_path = getattr(p, "_captured_front_save_path", None)
+                if not back_path and hasattr(p, "captured_back_frame"):
+                    back_path = getattr(p, "_captured_back_save_path", None)
+
+                # Debug image path
+                debug_path = getattr(p, "pendingDebugImage", None)
+                # Also check standard debug filenames in working directory
+                if not debug_path:
+                    for fname in ("debug_passport.png", "debug_license.png",
+                                  "debug_national_id_front.png"):
+                        import os
+                        if os.path.exists(fname):
+                            debug_path = fname
+                            break
+
+                save_scan(
+                    id_type     = selected_id,
+                    method      = method,
+                    result_text = formatted,
+                    front_path  = front_path,
+                    back_path   = back_path,
+                    debug_path  = debug_path,
+                )
+            except Exception as e:
+                print(f"[DB] save_scan error: {e}")
 
         # Single captured frame (passport camera flow)
         if hasattr(p, "captured_frame"):
@@ -71,15 +130,6 @@ class ReviewHandler:
             tab = ReviewHandler.frame_to_tab(getattr(p, frame_attr))
             p.reviewTabWidget.addTab(tab, tab_label)
 
-        # Uploaded files list (passport upload flow)
-        for file in p.files.uploaded_files:
-            path = file.get("path")
-            frame = cv2.imread(path)
-            if frame is None:
-                continue
-            tab = ReviewHandler.frame_to_tab(frame)
-            p.reviewTabWidget.addTab(tab, file["name"])
-
         if getattr(p, "debug_mode", False) and getattr(p, "pendingDebugImage", None):
             debug_path = p.pendingDebugImage
             frame = cv2.imread(debug_path)
@@ -87,6 +137,27 @@ class ReviewHandler:
                 tab = ReviewHandler.frame_to_tab(frame)
                 p.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
             p.pendingDebugImage = None
+
+        # ADDED: Grad-CAM tab — shows which part of the ID the classifier
+        # focused on. Only appears when id_classifier.py is available and
+        # successfully generated an overlay for this capture/upload.
+        gradcam_path = getattr(p, "_gradcam_path", None)
+        if gradcam_path and os.path.exists(gradcam_path):
+            frame = cv2.imread(gradcam_path)
+            if frame is not None:
+                # Annotate with classifier result if available
+                clf = getattr(p, "_classifier_result", None)
+                if clf is not None:
+                    label = f"{clf.class_name.upper()}  {clf.confidence:.1%}"
+                    cv2.putText(frame, label, (10, frame.shape[0] - 15),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3)
+                    cv2.putText(frame, label, (10, frame.shape[0] - 15),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2)
+                tab = ReviewHandler.frame_to_tab(frame)
+                p.reviewTabWidget.addTab(tab, "Grad-CAM")
+            # Clear so stale overlay doesn't reappear on the next session
+            p._gradcam_path      = None
+            p._classifier_result = None
 
     def add_file_tab(self, file_info: dict, tab_name: str) -> None:
         p = self.parent

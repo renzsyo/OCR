@@ -50,7 +50,9 @@ QPushButton#backButtonp1,
 QPushButton#backButtonp2,
 QPushButton#backButtonp3,
 QPushButton#backButtonp4,
-QPushButton#backButtonp5 {
+QPushButton#backButtonp5,
+QPushButton#backButtonp6,
+QPushButton#backButtonp7 {
     background-color: transparent;
     color: #333333;
     font-size: 16px;
@@ -104,7 +106,7 @@ QWidget {
    <widget class="QStackedWidget" name="Form1">
     <property name="geometry">
      <rect>
-      <x>0</x>
+      <x>10</x>
       <y>0</y>
       <width>761</width>
       <height>611</height>
@@ -116,14 +118,14 @@ QWidget {
      </font>
     </property>
     <property name="currentIndex">
-     <number>6</number>
+     <number>4</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QComboBox" name="idOption">
       <property name="geometry">
        <rect>
-        <x>240</x>
-        <y>220</y>
+        <x>242</x>
+        <y>200</y>
         <width>241</width>
         <height>41</height>
        </rect>
@@ -164,10 +166,10 @@ QWidget {
      <widget class="QLabel" name="label_4">
       <property name="geometry">
        <rect>
-        <x>280</x>
-        <y>90</y>
-        <width>191</width>
-        <height>51</height>
+        <x>291</x>
+        <y>80</y>
+        <width>211</width>
+        <height>61</height>
        </rect>
       </property>
       <property name="font">
@@ -185,8 +187,8 @@ QWidget {
      <widget class="QPushButton" name="continuep1">
       <property name="geometry">
        <rect>
-        <x>170</x>
-        <y>440</y>
+        <x>167</x>
+        <y>470</y>
         <width>371</width>
         <height>31</height>
        </rect>
@@ -380,8 +382,8 @@ QWidget {
      <widget class="QCheckBox" name="debugOption">
       <property name="geometry">
        <rect>
-        <x>320</x>
-        <y>410</y>
+        <x>304</x>
+        <y>430</y>
         <width>101</width>
         <height>20</height>
        </rect>
@@ -394,10 +396,16 @@ QWidget {
       <property name="geometry">
        <rect>
         <x>140</x>
-        <y>150</y>
-        <width>471</width>
+        <y>137</y>
+        <width>591</width>
         <height>31</height>
        </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Montserrat</family>
+        <pointsize>10</pointsize>
+       </font>
       </property>
       <property name="text">
        <string>Upload an existing photo of your ID or capture a new image using your camera</string>
@@ -429,8 +437,8 @@ QWidget {
      <widget class="QLabel" name="label_11">
       <property name="geometry">
        <rect>
-        <x>550</x>
-        <y>110</y>
+        <x>542</x>
+        <y>120</y>
         <width>191</width>
         <height>16</height>
        </rect>
@@ -539,8 +547,8 @@ QWidget {
      <widget class="QLabel" name="label_6">
       <property name="geometry">
        <rect>
-        <x>570</x>
-        <y>60</y>
+        <x>567</x>
+        <y>90</y>
         <width>131</width>
         <height>41</height>
        </rect>

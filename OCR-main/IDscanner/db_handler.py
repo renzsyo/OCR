@@ -24,7 +24,7 @@ BUCKET_NAME = "id-scans"
 
 _client = None
 
-def _init_client_on_main_thread() -> None:
+def init_client_on_main_thread() -> None:
     """
     Call this once from the main thread at startup (before any background
     threads run) so the Supabase/httpx/asyncio initialization never races
@@ -48,7 +48,7 @@ def get_client():
     # Falls back to lazy init if called before startup (safe on main thread).
     global _client
     if _client is None:
-        _init_client_on_main_thread()
+        init_client_on_main_thread()
     return _client
 
 def save_scan(
@@ -77,9 +77,9 @@ def save_scan_worker(
 
         ts = int(time.time())
 
-        front_url = upload_image(client, front_path, ts, "front", delete_after=True) if front_path else None
-        back_url  = upload_image(client, back_path, ts, "back", delete_after=True) if back_path  else None
-        debug_url = upload_image(client, debug_path, ts, "debug", delete_after=True) if debug_path else None
+        front_url = upload_image(client, front_path, ts, "front", method=method, delete_after=True) if front_path else None
+        back_url = upload_image(client, back_path, ts, "back", method=method, delete_after=True) if back_path else None
+        debug_url = upload_image(client, debug_path, ts, "debug", method=method, delete_after=True) if debug_path else None
 
         record = {
             "id_type":     id_type,
@@ -100,6 +100,7 @@ def upload_image(
     local_path: str,
     timestamp: int,
     label: str,
+    method: str = "Upload",
     delete_after: bool = False,
 ) -> Optional[str]:
     if not local_path or not os.path.exists(local_path):
@@ -108,7 +109,13 @@ def upload_image(
 
     try:
         filename     = os.path.basename(local_path)
-        storage_path = f"{timestamp}_{label}_{filename}"
+        folder_map = {
+            "Camera": "Camera",
+            "Upload": "Upload",
+            "PDF": "PDF",
+        }
+        storage_folder = folder_map.get(method, "Upload")
+        storage_path = f"{storage_folder}/{timestamp}_{label}_{filename}"
 
         with open(local_path, "rb") as f:
             file_bytes = f.read()

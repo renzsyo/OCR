@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class WorkerSignals(QObject):
-    scan_finished = pyqtSignal(object)   # list[tuple] — [(id_type, result, front_img, back_img)]
+    scan_finished = pyqtSignal(object)   # list[tuple] — [(id_type, result, front_img, back_img, debug_info)]
     status        = pyqtSignal(str)
 
 
@@ -254,7 +254,16 @@ class PdfPreviewHandler:
             result = {}
 
         print("[PdfPreviewHandler] scan done")
-        self.signals.scan_finished.emit([(id_type, result, scan_front, scan_back)])
+        page_ids = [id(pg) for pg in pages]
+        debug_info = {
+            "id_type": id_type,
+            "page_count": len(pages),
+            "detected_page": page_idx + 1,
+            "front_page": (page_ids.index(id(scan_front)) + 1) if scan_front is not None else None,
+            "back_page": (page_ids.index(id(scan_back)) + 1) if scan_back is not None else None,
+            "raw_result": result,
+        }
+        self.signals.scan_finished.emit([(id_type, result, scan_front, scan_back, debug_info)])
 
     # ------------------------------------------------------------------
     # Main-thread slot: scan finished
@@ -264,13 +273,23 @@ class PdfPreviewHandler:
         self._scan_results = results
         self._scan_done = True
         p = self.parent
-        p.pendingResponse   = results[0][1] if results else {}
+        p.pendingResponse = results[0][1] if results else {}
         p.pendingDebugImage = results[0][1].get("debug_image") if results else None
+        print("[PDF DEBUG] pendingDebugImage:", p.pendingDebugImage)
+        print("[PDF DEBUG] raw result keys:", results[0][1].keys() if results else "no results")
+        print("[PDF DEBUG] front result keys:", results[0][1].get('front', {}).keys())
+        # NEW: store PDF debug info for the debug tab in review
+        p._pdf_debug_info = results[0][4] if results and len(results[0]) > 4 else None
         self.set_status("Scan complete — Ready to continue")
 
         if results:
-            id_type = results[0][0]
-            p.detected_id_type = id_type
+            _result = results[0][1]
+            p.pendingDebugImage = (
+                    _result.get("debug_image")
+                    or _result.get("front", {}).get("debug_image")
+            )
+        else:
+            p.pendingDebugImage = None
 
     # ------------------------------------------------------------------
     # Continue button
@@ -298,7 +317,7 @@ class PdfPreviewHandler:
             QMessageBox.warning(p, "No Results", "No scan results to show.")
             return
 
-        id_type, result, front_img, back_img = results[0]
+        id_type, result, front_img, back_img, *_ = results[0]
         self.save_images(id_type, front_img, back_img)
 
         p.detected_id_type = id_type

@@ -137,6 +137,41 @@ class ReviewHandler:
         # background thread (delete_after=True) can delete the files from disk.
         # Tab widgets are built from the in-memory arrays, so file deletion
         # timing no longer causes a crash.
+            # ── PDF Debug tab (only when debug_mode is on and method was PDF) ──
+            pdf_debug = getattr(p, "_pdf_debug_info", None)
+            if getattr(p, "debug_mode", False) and pdf_debug:
+                p._pdf_debug_info = None  # clear so it doesn't bleed into next session
+                try:
+                    lines = [
+                        f"PDF DEBUG INFORMATION",
+                        f"{'─' * 35}",
+                        f"  ID Type Detected : {pdf_debug.get('id_type', 'N/A')}",
+                        f"  Total Pages      : {pdf_debug.get('page_count', 'N/A')}",
+                        f"  Detected on Page : {pdf_debug.get('detected_page', 'N/A')}",
+                        f"  Front Assigned   : Page {pdf_debug.get('front_page', 'N/A')}",
+                        f"  Back Assigned    : Page {pdf_debug.get('back_page', 'N/A')}",
+                        f"",
+                        f"RAW SCAN RESULT",
+                        f"{'─' * 35}",
+                    ]
+                    import json
+                    raw = pdf_debug.get("raw_result", {})
+                    lines.append(json.dumps(raw, indent=2, default=str))
+
+                    debug_text = "\n".join(lines)
+
+                    from PyQt6.QtWidgets import QTextEdit
+                    debug_widget = QWidget()
+                    layout = QVBoxLayout(debug_widget)
+                    text_box = QTextEdit()
+                    text_box.setReadOnly(True)
+                    text_box.setPlainText(debug_text)
+                    text_box.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+                    layout.addWidget(text_box)
+                    p.reviewTabWidget.addTab(debug_widget, "PDF Debug Info")
+                except Exception as e:
+                    print(f"[ReviewHandler] PDF debug tab error: {e}")
+
         debug_frame   = None
         gradcam_frame = None
         clf_result_tab = None

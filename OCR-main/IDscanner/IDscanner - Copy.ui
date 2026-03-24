@@ -118,7 +118,7 @@ QWidget {
      </font>
     </property>
     <property name="currentIndex">
-     <number>4</number>
+     <number>3</number>
     </property>
     <widget class="QWidget" name="page">
      <widget class="QComboBox" name="idOption">
@@ -722,9 +722,9 @@ QWidget {
      <widget class="QPlainTextEdit" name="resultbox">
       <property name="geometry">
        <rect>
-        <x>533</x>
-        <y>110</y>
-        <width>221</width>
+        <x>535</x>
+        <y>120</y>
+        <width>201</width>
         <height>321</height>
        </rect>
       </property>

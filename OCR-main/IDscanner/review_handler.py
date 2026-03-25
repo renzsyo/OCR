@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel,
-    QFileDialog, QMessageBox,
+    QFileDialog, QMessageBox, QVBoxLayout
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -98,6 +98,7 @@ class ReviewHandler:
                         front_path = getattr(p, "_captured_front_save_path", None)
                     if not back_path and hasattr(p, "captured_back_frame"):
                         back_path = getattr(p, "_captured_back_save_path", None)
+
                     debug_path = getattr(p, "pendingDebugImage", None)
                     if not debug_path:
                         for fname in ("debug_passport.png", "debug_license.png",
@@ -105,7 +106,10 @@ class ReviewHandler:
                             if os.path.exists(fname):
                                 debug_path = fname
                                 break
-                    print(f"[DEBUG] calling _save_scan front={front_path} debug={debug_path}")
+                    back_debug_path = getattr(p, "pendingDebugImageBack", None)
+                    if not back_debug_path and os.path.exists("debug_national_id_back.png"):
+                        back_debug_path = "debug_national_id_back.png"
+                    print(f"[DEBUG] calling _save_scan front={front_path} debug={debug_path} back_debug={back_debug_path}")
                     _save_scan(
                         id_type     = selected_id,
                         method      = method,
@@ -113,6 +117,7 @@ class ReviewHandler:
                         front_path  = front_path,
                         back_path   = back_path,
                         debug_path  = debug_path,
+                        back_debug_path=back_debug_path,
                     )
                     print("[DEBUG] _save_scan returned")
                 except Exception as e:
@@ -173,6 +178,7 @@ class ReviewHandler:
                     print(f"[ReviewHandler] PDF debug tab error: {e}")
 
         debug_frame   = None
+        debug_frame_back = None
         gradcam_frame = None
         clf_result_tab = None
 
@@ -180,6 +186,11 @@ class ReviewHandler:
             _dbg_path = p.pendingDebugImage
             p.pendingDebugImage = None          # clear immediately
             debug_frame = cv2.imread(_dbg_path) # None if already deleted — handled below
+
+        if getattr(p, "debug_mode", False) and getattr(p, "pendingDebugImageBack", None):
+            _dbg_back_path = p.pendingDebugImageBack
+            p.pendingDebugImageBack = None
+            debug_frame_back = cv2.imread(_dbg_back_path)
 
         _gradcam_path = getattr(p, "_gradcam_path", None)
         if _gradcam_path and os.path.exists(_gradcam_path):
@@ -192,7 +203,11 @@ class ReviewHandler:
         # Build tabs from already-loaded frames
         if debug_frame is not None:
             tab = ReviewHandler.frame_to_tab(debug_frame)
-            p.reviewTabWidget.addTab(tab, "Debug - Bounding Boxes")
+            p.reviewTabWidget.addTab(tab, "Debug - Front")
+
+        if debug_frame_back is not None:
+            tab = ReviewHandler.frame_to_tab(debug_frame_back)
+            p.reviewTabWidget.addTab(tab, "Debug - Back")
 
         if gradcam_frame is not None:
             if clf_result_tab is not None:

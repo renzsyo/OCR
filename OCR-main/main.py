@@ -33,8 +33,8 @@ class MainWindow(QMainWindow):
         # background inference threads start. Lazy init inside a worker
         # thread races with PyTorch/CUDA and causes 0xC0000409 on Windows.
         try:
-            from IDscanner.db_handler import _init_client_on_main_thread
-            _init_client_on_main_thread()
+            from IDscanner.db_handler import init_client_on_main_thread
+            init_client_on_main_thread()
         except Exception as _db_e:
             print(f"[MainWindow] DB pre-init failed (non-fatal): {_db_e}")
 
@@ -326,6 +326,7 @@ class MainWindow(QMainWindow):
         self.detected_id_type = None
         self.pendingResponse = None
         self.pendingDebugImage = None
+        self.pendingDebugImageBack = None
         self.inference.reset_detection()
         self.camera.stop_camera()
         for widget_name in [

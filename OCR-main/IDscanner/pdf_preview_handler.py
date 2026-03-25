@@ -1,21 +1,5 @@
 """
 pdf_preview_handler.py
-----------------------
-CHANGES FROM PREVIOUS VERSION:
-  - CHANGED [lines 299-315]:_save_images() — all ID types (including Passport) now
-                             save to p.front_file / p.back_file directly; removed
-                             p.files.uploaded_files, p.files.current_index, and
-                             p.files.refresh_file_list() calls (list no longer exists)
-  - CHANGED [lines 252-266]:_on_scan_finished() — replaced p.idOption.findText(id_type) /
-                             p.idOption.setCurrentIndex() with p.detected_id_type = id_type
-                             (idOption now holds method names, not ID type names)
-  - CHANGED [lines 283-298]:_proceed() — same idOption fix; removed findText call,
-                             sets p.detected_id_type directly; FIXED: now appends page 6
-                             to page_history so Back from review returns to PDF preview
-                             instead of page 0
-  - ADDED   [lines 319-348]:reupload_pdf() — opens file dialog on PDF preview page,
-                             converts and reloads new PDF without leaving the page
-
 BUGFIXES (latest):
   - FIXED   [numpy_to_pixmap]: QImage(resized.data, ...) was missing .copy() — the local
                                numpy array `resized` went out of scope before Qt finished
@@ -148,7 +132,7 @@ class PdfPreviewHandler:
         print("[PdfPreviewHandler] worker started")
         from .inference import (
             auto_detect_all_ids, decode_qr_safe,
-            scan_passport, scan_national_id,
+            scan_passport, scan_national_id_back,
             scan_national_id_front, scan_national_id_front_from_ocr,
             scan_driver_license,
         )
@@ -202,7 +186,7 @@ class PdfPreviewHandler:
                 print("[PdfPreviewHandler] no QR found by quick scan, trying full QR scan on all pages")
                 best_back_idx = None
                 for i, pg in enumerate(pages):
-                    from .inference import scan_national_id as _snid
+                    from .inference import scan_national_id_back as _snid
                     probe = _snid(pg)
                     if probe.get("valid"):
                         best_back_idx = i
@@ -228,7 +212,7 @@ class PdfPreviewHandler:
                 result = scan_passport(scan_front, debug=debug)
 
             elif id_type == "National ID":
-                qr_result = scan_national_id(scan_back)
+                qr_result = scan_national_id_back(scan_back, debug=debug)
                 if cached_ocr is not None:
                     front_result = scan_national_id_front_from_ocr(
                         cached_ocr, scan_front, debug=debug)
@@ -288,8 +272,10 @@ class PdfPreviewHandler:
                     _result.get("debug_image")
                     or _result.get("front", {}).get("debug_image")
             )
+            p.pendingDebugImageBack = _result.get("qr", {}).get("debug_image")
         else:
             p.pendingDebugImage = None
+            p.pendingDebugImageBack = None
 
     # ------------------------------------------------------------------
     # Continue button

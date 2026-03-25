@@ -2,39 +2,6 @@
 inference_handler.py
 --------------------
 CHANGES FROM PREVIOUS VERSION:
-  - REMOVED [lines 44-68]:  _classify_check() — ID type no longer chosen by user
-  - REMOVED [n/a]:          _ask_manual_id_type() — failed detection always asks for
-                             a clearer photo, never shows manual selection dialog
-  - ADDED   [lines 53-81]:  detection_complete, detection_result_type, detection_confidence,
-                             _retry_count flags in __init__
-  - ADDED   [lines 72-81]:  reset_detection() — resets all detection flags; called at
-                             session start and on recapture
-  - ADDED   [lines 118-130]:infer_front_camera() — called after front camera capture;
-                             starts _run_front_detection() in background thread
-  - ADDED   [lines 131-153]:infer_front_upload() — called after front image upload;
-                             reads from p.front_file (not uploaded_files list)
-  - ADDED   [lines 154-210]:_run_front_detection() — background thread; classifies image,
-                             then immediately runs full OCR in the same thread for single-sided
-                             IDs to prevent PyTorch + PaddleOCR thread collision (0xC0000409)
-  - ADDED   [lines 211-248]:_on_detection_finished() — main-thread callback; routes to
-                             dual page (NID/UMID) or signals OCR complete (single-sided)
-  - CHANGED [lines 255-296]:_run_full_ocr_camera() / _run_full_ocr_upload() — kept as
-                             fallback but no longer called in normal flow; OCR now runs
-                             inside _run_front_detection() sequentially
-  - CHANGED [lines 131-153]:infer_front_upload() reads from p.front_file instead of
-                             uploaded_files list (list removed)
-  - CHANGED [lines 275-295]:_run_full_ocr_upload() reads from p.front_file instead of
-                             uploaded_files list
-  - FIXED   [lines 154-216]:0xC0000409 crash — PyTorch classifier and PaddleOCR now run
-                             sequentially in one thread, never concurrently
-  - FIXED   [lines 172-179]:blank/uniform frame crash — variance check skips near-blank
-                             frames before running classifier
-  - FIXED   [lines 181-192]:classifier returning None for unmapped class indices (model
-                             has 6 output classes but only 3 are mapped) — now falls back
-                             to keyword OCR via auto_detect_all_ids instead of marking
-                             as inconclusive immediately
-  - KEPT    [lines 298-610]:all run_inference_*, validate_*, format_*, match_* unchanged
-
 BUGFIXES (latest):
   - FIXED   [run_front_detection]: removed redundant local imports of cv2/numpy as _cv2/_np;
                                    was masking the module-level imports and causing confusion
@@ -52,7 +19,7 @@ import numpy as np
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
 from .inference import (
-    scan_passport, scan_national_id, scan_driver_license,
+    scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
 )
 # ADDED: YOLO classifier + Grad-CAM (runs after classify_id_type in run_front_detection)
@@ -75,11 +42,6 @@ class InferenceHandler:
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
 
-        # ADDED: lock that protects every cross-thread flag write/read.
-        # Background inference threads write these; the main-thread QTimer reads them.
-        # Without the lock, Python's GIL is not enough — attribute assignment is not
-        # atomic across all CPython builds and the read-modify side on the main thread
-        # can race with the write side on the worker thread.
         self._result_lock = threading.Lock()
 
         # Existing inference completion flags
@@ -87,7 +49,7 @@ class InferenceHandler:
         self.dl_inference_complete = False
         self.ni_inference_complete = False
 
-        # NEW: front-only detection flags
+        #front-only detection flags
         self.detection_complete = False
         self.detection_result_type = None
         self.detection_confidence = 0.0
@@ -428,7 +390,7 @@ class InferenceHandler:
         p = self.parent
         debug = getattr(p, "debug_mode", False)
 
-        qr_result = scan_national_id(back_image)
+        qr_result = scan_national_id_back(back_image, debug=debug)
         print("[NationalID] QR result:", qr_result)
 
         front_result = scan_national_id_front(front_image, debug=debug)
@@ -447,6 +409,7 @@ class InferenceHandler:
         with self._result_lock:
             p.pendingResponse = payload
             p.pendingDebugImage = front_result.get("debug_image")
+            p.pendingDebugImageBack = qr_result.get("debug_image")
             self.ni_inference_complete = True
         print(payload)
 

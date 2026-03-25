@@ -65,7 +65,7 @@ _DETECT_IOU    = 0.45
 _detector       = None   # YOLO instance, loaded lazily on first capture
 _detector_error = None   # set on load failure; suppresses repeated attempts
 
-def _get_detector():
+def get_detector():
     """Lazy-load the YOLO detector once. Returns the model or None on failure."""
     global _detector, _detector_error
     if _detector_error:
@@ -89,13 +89,13 @@ def _get_detector():
         return None
 
 
-def _run_detector(frame: np.ndarray) -> list[dict]:
+def run_detector(frame: np.ndarray) -> list[dict]:
     """
     Run YOLO detection on a BGR frame.
     Returns [{"bbox": (x1,y1,x2,y2), "confidence": float}, ...] or [].
     Falls back to empty list if model unavailable — caller handles gracefully.
     """
-    model = _get_detector()
+    model = get_detector()
     if model is None:
         return []
     try:
@@ -264,7 +264,7 @@ class CamHandler:
 
             # Run YOLO detector for live bounding box.
             # Falls back to a static alignment guide if model unavailable.
-            detections = _run_detector(display_frame)
+            detections = run_detector(display_frame)
             if detections:
                 # Draw each detected box; highlight the best one
                 best = max(detections, key=lambda d: d["confidence"])

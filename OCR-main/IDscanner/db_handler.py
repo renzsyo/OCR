@@ -58,16 +58,17 @@ def save_scan(
     front_path:  Optional[str] = None,
     back_path:   Optional[str] = None,
     debug_path:  Optional[str] = None,
+    back_debug_path:  Optional[str] = None,
 ) -> None:
 
     threading.Thread(
         target=save_scan_worker,
-        args=(id_type, method, result_text, front_path, back_path, debug_path),
+        args=(id_type, method, result_text, front_path, back_path, debug_path, back_debug_path),
         daemon=True,
     ).start()
 
 def save_scan_worker(
-    id_type, method, result_text, front_path, back_path, debug_path
+    id_type, method, result_text, front_path, back_path, debug_path, back_debug_path
 ) -> None:
     try:
         client=get_client()
@@ -80,13 +81,14 @@ def save_scan_worker(
         front_url = upload_image(client, front_path, ts, "front", method=method, delete_after=True) if front_path else None
         back_url = upload_image(client, back_path, ts, "back", method=method, delete_after=True) if back_path else None
         debug_url = upload_image(client, debug_path, ts, "debug", method=method, delete_after=True) if debug_path else None
-
+        back_debug_url = upload_image(client, back_debug_path, ts, "debug_back", method=method,delete_after=True) if back_debug_path else None
         record = {
             "id_type":     id_type,
             "method":      method,
             "front_url":   front_url,
             "back_url":    back_url,
             "debug_url":   debug_url,
+            "back_debug_url": back_debug_url,
             "result_text": result_text,
         }
 
@@ -114,8 +116,11 @@ def upload_image(
             "Upload": "Upload",
             "PDF": "PDF",
         }
-        storage_folder = folder_map.get(method, "Upload")
-        storage_path = f"{storage_folder}/{timestamp}_{label}_{filename}"
+        method_folder = folder_map.get(method, "Upload")
+        if label in ("debug", "debug_back"):
+            storage_path = f"Debug/{method_folder}/{timestamp}_{label}_{filename}"
+        else:
+            storage_path = f"{method_folder}/{timestamp}_{label}_{filename}"
 
         with open(local_path, "rb") as f:
             file_bytes = f.read()

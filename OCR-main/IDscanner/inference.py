@@ -560,7 +560,6 @@ def detect_two_ids(image: np.ndarray) -> tuple[np.ndarray | None, np.ndarray | N
         print(f"[detect_two_ids] Error: {e}")
         return None, None
 
-
 # ====================================================
 # PUBLIC FUNCTIONS (Called in main.py)
 # ====================================================
@@ -645,13 +644,14 @@ def decode_qr_safe(image: np.ndarray) -> str | None:
     return data
 
 
-def scan_national_id(image: np.ndarray | str) -> dict:
+def scan_national_id_back(image: np.ndarray | str, debug: bool = False) -> dict:
     if isinstance(image, str):
         image = cv2.imread(image)
     if image is None:
         return {"error": "invalid image"}
 
-    result = {"NationalID/QR": None, "parsed": None, "valid": False}
+    result = {"NationalID/QR": None, "parsed": None, "valid": False, "debug_image": None}
+
     print("[scan_national_id] decoding QR (OpenCV first, pyzbar fallback)...")
 
     h, w = image.shape[:2]
@@ -674,6 +674,23 @@ def scan_national_id(image: np.ndarray | str) -> dict:
     if qr_data:
         result["NationalID/QR"] = parse_qr_data(qr_data)
         result["valid"] = True
+
+    if debug:
+        try:
+            debug_img = image.copy()
+            from pyzbar.pyzbar import decode as pyzbar_decode
+            decoded = pyzbar_decode(image)
+            for obj in decoded:
+                pts = np.array(obj.polygon, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(debug_img, [pts], True, (0, 255, 0), 2)
+                x, y, w_box, h_box = obj.rect
+                cv2.putText(debug_img, "QR Code", (x, y - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            debug_path = "debug_national_id_back.png"
+            cv2.imwrite(debug_path, debug_img)
+            result["debug_image"] = debug_path
+        except Exception as _e:
+            print(f"[scan_national_id] Debug overlay failed: {_e}")
 
     return result
 

@@ -15,6 +15,7 @@ CHANGES FROM PREVIOUS VERSION:
 import time, os, threading
 from typing import Optional
 from dotenv import load_dotenv
+from paddle.device.cuda.cuda_graphed_layer import debug_print
 
 load_dotenv()
 
@@ -52,23 +53,17 @@ def get_client():
     return _client
 
 def save_scan(
-    id_type:     str,
-    method:      str,
-    result_text: str,
-    front_path:  Optional[str] = None,
-    back_path:   Optional[str] = None,
-    debug_path:  Optional[str] = None,
-    back_debug_path:  Optional[str] = None,
+    id_type, method, result_text,
+    front_path=None, back_path=None, debug_path=None, back_debug_path=None, gradcam_path=None,
 ) -> None:
-
     threading.Thread(
         target=save_scan_worker,
-        args=(id_type, method, result_text, front_path, back_path, debug_path, back_debug_path),
+        args=(id_type, method, result_text, front_path, back_path, debug_path, back_debug_path, gradcam_path),
         daemon=True,
     ).start()
 
 def save_scan_worker(
-    id_type, method, result_text, front_path, back_path, debug_path, back_debug_path
+    id_type, method, result_text, front_path, back_path, debug_path, back_debug_path, gradcam_path
 ) -> None:
     try:
         client=get_client()
@@ -82,6 +77,7 @@ def save_scan_worker(
         back_url = upload_image(client, back_path, ts, "back", method=method, delete_after=True) if back_path else None
         debug_url = upload_image(client, debug_path, ts, "debug", method=method, delete_after=True) if debug_path else None
         back_debug_url = upload_image(client, back_debug_path, ts, "debug_back", method=method,delete_after=True) if back_debug_path else None
+        gradcam_url = upload_image(client, gradcam_path, ts, "gradcam", method=method,delete_after=False) if gradcam_path else None
         record = {
             "id_type":     id_type,
             "method":      method,
@@ -90,6 +86,7 @@ def save_scan_worker(
             "debug_url":   debug_url,
             "back_debug_url": back_debug_url,
             "result_text": result_text,
+            "gradcam_url": gradcam_url,
         }
 
         response = client.table("scans").insert(record).execute()
@@ -116,9 +113,24 @@ def upload_image(
             "Upload": "Upload",
             "PDF": "PDF",
         }
+        debug_folder_map = {
+            "Camera": "Camera_debug",
+            "Upload": "Upload_debug",
+            "PDF": "PDF_debug",
+        }
+        gradcam_folder_map = {
+            "Camera": "Camera_grad",
+            "Upload": "Upload_grad",
+            "PDF": "PDF_grad",
+        }
         method_folder = folder_map.get(method, "Upload")
+        debug_method_folder = debug_folder_map.get(method, "Upload_debug")
+        gradcam_method_folder = gradcam_folder_map.get(method, "Upload_grad")
+
         if label in ("debug", "debug_back"):
-            storage_path = f"Debug/{method_folder}/{timestamp}_{label}_{filename}"
+            storage_path = f"Debug/{debug_method_folder}/{timestamp}_{label}_{filename}"
+        elif label == "gradcam":
+            storage_path = f"Grad-CAM/{gradcam_method_folder}/{timestamp}_{label}_{filename}"
         else:
             storage_path = f"{method_folder}/{timestamp}_{label}_{filename}"
 

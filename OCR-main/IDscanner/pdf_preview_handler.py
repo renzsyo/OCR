@@ -237,6 +237,24 @@ class PdfPreviewHandler:
             import traceback; traceback.print_exc()
             result = {}
 
+        if debug and scan_front is not None:
+            try:
+                from .id_classifier import classify_and_gradcam as _cag
+                clf_result = _cag(scan_front)
+                if clf_result is not None:
+                    self.parent._gradcam_path = clf_result.gradcam_path
+                    self.parent._classifier_result = clf_result
+                else:
+                    self.parent._gradcam_path = None
+                    self.parent._classifier_result = None
+            except Exception as _e:
+                print(f"[PdfPreviewHandler] Grad-CAM failed (non-fatal): {_e}")
+                self.parent._gradcam_path = None
+                self.parent._classifier_result = None
+        else:
+            self.parent._gradcam_path = None
+            self.parent._classifier_result = None
+
         print("[PdfPreviewHandler] scan done")
         page_ids = [id(pg) for pg in pages]
         debug_info = {

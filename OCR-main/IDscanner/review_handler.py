@@ -110,6 +110,7 @@ class ReviewHandler:
                     if not back_debug_path and os.path.exists("debug_national_id_back.png"):
                         back_debug_path = "debug_national_id_back.png"
                     print(f"[DEBUG] calling _save_scan front={front_path} debug={debug_path} back_debug={back_debug_path}")
+                    gradcam_path = getattr(p, "_gradcam_path", None)
                     _save_scan(
                         id_type     = selected_id,
                         method      = method,
@@ -118,6 +119,7 @@ class ReviewHandler:
                         back_path   = back_path,
                         debug_path  = debug_path,
                         back_debug_path=back_debug_path,
+                        gradcam_path = gradcam_path,
                     )
                     print("[DEBUG] _save_scan returned")
                 except Exception as e:
@@ -193,9 +195,10 @@ class ReviewHandler:
             debug_frame_back = cv2.imread(_dbg_back_path)
 
         _gradcam_path = getattr(p, "_gradcam_path", None)
-        if _gradcam_path and os.path.exists(_gradcam_path):
+        if getattr(p, "debug_mode", False) and _gradcam_path and os.path.exists(_gradcam_path):
             gradcam_frame  = cv2.imread(_gradcam_path)
             clf_result_tab = getattr(p, "_classifier_result", None)
+
         # Always clear to prevent stale data bleeding into next session
         p._gradcam_path      = None
         p._classifier_result = None

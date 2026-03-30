@@ -11,7 +11,7 @@ from PIL import Image
 from pyzbar.pyzbar import decode as pyzbar_decode
 
 from .ocr_engine import ocr_predict
-from IDscanner.inference import safe_resize, draw_bounding_boxes
+from IDscanner.utils import safe_resize, draw_bounding_boxes
 
 
 # ── QR Helpers ────────────────────────────────────────────────────────────────

@@ -578,6 +578,37 @@ class InferenceHandler:
                     f"{'─' * 23}\n"
                     f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n\n"
                 )
+            elif id_type == "PhilHealth":
+                data = result.get("parsed", {}).get("PhilHealth/OCR", {})
+                return (
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name        : {data.get('name', 'N/A')}\n"
+                    f"  Sex         : {data.get('sex', 'N/A')}\n"
+                    f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n\n"
+                    f"  ADDRESS\n"
+                    f"{'─' * 23}\n"
+                    f"  Address     : {data.get('address', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  PhilHealth No : {data.get('philhealth_id_number', 'N/A')}\n\n"
+                )
+
+            elif id_type == "TIN":
+                data = result.get("parsed", {}).get("TIN/OCR", {})
+                return (
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name        : {data.get('name', 'N/A')}\n\n"
+                    f"  ADDRESS\n"
+                    f"{'─' * 23}\n"
+                    f"  Address     : {data.get('address', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  TIN         : {data.get('tin', 'N/A')}\n"
+                    f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n"
+                    f"  Date Issued : {data.get('date_issued', 'N/A')}\n\n"
+                )
 
         except Exception as e:
             return f"⚠️ Could not format result: {e}\n\nRaw output:\n{result}"
@@ -671,21 +702,59 @@ class InferenceHandler:
 
     def validate_philhealth_result_sync(self, result: dict) -> bool:
         p = self.parent
-        data = result.get("parsed", {}).get("PhilHealth/OCR", {})
-        if not data or not data.get("philhealth_id_number"):
-            QMessageBox.warning(p, "Scan Failed",
-                                "No PhilHealth ID number detected.\n\nPlease upload a clearer image.")
+        try:
+            data = result.get("parsed", {}).get("PhilHealth/OCR", {})
+            if not data:
+                QMessageBox.warning(p, "Scan Failed",
+                                    "No PhilHealth data was detected.\n\n"
+                                    "Please upload a clearer image or recapture.")
+                return False
+
+            missing = []
+            if not (data.get("philhealth_id_number") or "").strip():
+                missing.append("PhilHealth ID Number")
+            if not (data.get("name") or "").strip():
+                missing.append("Name")
+
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                                    f"The following required fields were not detected:\n\n"
+                                    f"{', '.join(missing)}\n\n"
+                                    f"Please upload a clearer image or recapture.")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"[validate_philhealth_result_sync] Error: {e}")
             return False
-        return True
 
     def validate_tin_result_sync(self, result: dict) -> bool:
         p = self.parent
-        data = result.get("parsed", {}).get("TIN/OCR", {})
-        if not data or not data.get("tin"):
-            QMessageBox.warning(p, "Scan Failed",
-                                "No TIN number detected.\n\nPlease upload a clearer image.")
+        try:
+            data = result.get("parsed", {}).get("TIN/OCR", {})
+            if not data:
+                QMessageBox.warning(p, "Scan Failed",
+                                    "No TIN data was detected.\n\n"
+                                    "Please upload a clearer image or recapture.")
+                return False
+
+            missing = []
+            if not (data.get("tin") or "").strip():
+                missing.append("TIN Number")
+            if not (data.get("name") or "").strip():
+                missing.append("Name")
+
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                                    f"The following required fields were not detected:\n\n"
+                                    f"{', '.join(missing)}\n\n"
+                                    f"Please upload a clearer image or recapture.")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"[validate_tin_result_sync] Error: {e}")
             return False
-        return True
 
     @staticmethod
     def match_national_id(qr_result: dict, front_result: dict) -> dict:

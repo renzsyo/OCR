@@ -10,7 +10,7 @@ import numpy as np
 from mrz.checker.td3 import TD3CodeChecker
 
 from .ocr_engine import ocr_predict
-from IDscanner.inference import safe_resize, draw_bounding_boxes
+from IDscanner.utils import safe_resize, draw_bounding_boxes
 
 
 def sanitize_mrz_line(line: str, length: int = 44) -> str:

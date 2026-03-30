@@ -9,7 +9,7 @@ import re, cv2
 import numpy as np
 
 from .ocr_engine import ocr_predict
-from IDscanner.inference import safe_resize
+from IDscanner.utils import safe_resize, draw_bounding_boxes
 
 
 def extract_lines(image: np.ndarray) -> list[str]:

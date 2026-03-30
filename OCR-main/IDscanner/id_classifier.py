@@ -32,7 +32,7 @@ from ultralytics import YOLO
 #  CONFIG — adjust paths if needed
 # ─────────────────────────────────────────────
 _CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__),"AI models", "classifybest.pt")
-_CLASS_NAMES     = ["drivers_license", "passport", "philhealth", "philid", "senior", "sss"]
+_CLASS_NAMES     = ["drivers_license", "passport", "philhealth", "philid", "senior", "sss","tin"]
 _CONF_THRESHOLD  = 0.80          # below this → class_name = "Uncertain"
 _GRADCAM_DIR = os.path.join(os.path.dirname(__file__), "output", "gradcam")
 _GRADCAM_TMPFILE = os.path.join(_GRADCAM_DIR, "_gradcam_latest.jpg")

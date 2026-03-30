@@ -13,8 +13,7 @@ ONNX Runtime is not thread-safe — concurrent calls crash the process
 with exit code 0xC0000409 on Windows.
 """
 
-import cv2
-import threading
+import cv2, threading
 import numpy as np
 from paddleocr import PaddleOCR
 

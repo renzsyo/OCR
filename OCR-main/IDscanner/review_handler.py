@@ -16,8 +16,7 @@ CHANGES FROM PREVIOUS VERSION:
                              p._captured_back_save_path; debug image found by
                              checking standard filenames in working directory
 """
-import os
-import cv2
+import os,cv2
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from PyQt6.QtWidgets import (

@@ -9,7 +9,7 @@ import re, cv2
 import numpy as np
 
 from .ocr_engine import ocr_predict
-from IDscanner.utils import safe_resize, draw_bounding_boxes
+from .utils import safe_resize
 
 # ── Regex Patterns ────────────────────────────────────────────────────────────
 

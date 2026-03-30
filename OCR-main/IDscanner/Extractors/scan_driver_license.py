@@ -9,7 +9,7 @@ import cv2, re
 import numpy as np
 
 from .ocr_engine import ocr_predict
-from IDscanner.utils import safe_resize, draw_bounding_boxes
+from .utils import safe_resize, draw_bounding_boxes
 
 
 def normalize_text(text: str) -> str:

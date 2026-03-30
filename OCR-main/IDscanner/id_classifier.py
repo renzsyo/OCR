@@ -18,10 +18,8 @@ as an extra tab without any structural changes to the review page.
 
 from __future__ import annotations
 
-import os
-import cv2
+import os, cv2, torch
 import numpy as np
-import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
 from torchvision import transforms

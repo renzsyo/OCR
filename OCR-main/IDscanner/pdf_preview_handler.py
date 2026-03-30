@@ -15,9 +15,7 @@ Flow:
   6. reupload_pdf()     -> called when user clicks Re-Upload PDF, reloads preview.
 """
 
-import os
-import threading
-import cv2
+import os, threading, cv2
 import numpy as np
 
 from PyQt6.QtWidgets import (

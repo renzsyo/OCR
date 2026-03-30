@@ -36,7 +36,8 @@ from Extractors import (
     decode_qr_safe,
     scan_philhealth,
     scan_tin,
-    ocr_predict
+    scan_senior_citizen,
+    ocr_predict,
 )
 
 
@@ -165,8 +166,8 @@ CLASSIFIER_LABELS = {
     0: "Driver's License",
     1: "Passport",
     2: "PhilHealth",
-    3: "National ID", #philID inside mobilenet model so correct placement
-    4: "Senior",      # placeholder — no scanner yet
+    3: "National ID",
+    4: "Senior Citizen",
     5: "SSS",         # placeholder — no scanner yet
     6: "TIN",
 }
@@ -316,6 +317,12 @@ def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
                   or "TAXPAYER" in texts):
                 print(f"[auto_detect] Page {i+1}: TIN (keywords)")
                 results.append(("TIN", i, ocr_results))
+                used_indices.add(i)
+
+            elif ("SENIOR CITIZEN" in texts or "OSCA" in texts
+                  or "OFFICE FOR SENIOR" in texts):
+                print(f"[auto_detect] Page {i + 1}: Senior Citizen (keywords)")
+                results.append(("Senior Citizen", i, ocr_results))
                 used_indices.add(i)
 
             else:

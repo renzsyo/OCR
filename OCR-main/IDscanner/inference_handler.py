@@ -12,6 +12,10 @@ BUGFIXES (latest):
                                    writes to pendingResponse, pendingDebugImage, and all
                                    *_inference_complete flags. The timer now acquires the
                                    same lock before reading the flags.
+  - ADDED   [run_front_detection]: Senior Citizen routed to run_inference_senior_citizen()
+  - ADDED   [methods]:            run_inference_senior_citizen()
+  - ADDED   [format_pending_response]: Senior Citizen formatting block
+  - ADDED   [validate_*]:         validate_senior_citizen_result_sync()
 """
 
 import cv2, time, threading, os
@@ -21,7 +25,7 @@ from PyQt6.QtWidgets import QMessageBox
 from .inference import (
     scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
-    scan_philhealth, scan_tin
+    scan_philhealth, scan_tin, scan_senior_citizen
 )
 # ADDED: YOLO classifier + Grad-CAM (runs after classify_id_type in run_front_detection)
 try:
@@ -233,12 +237,12 @@ class InferenceHandler:
                         if id_type is None and clf_result.class_name != "Uncertain":
                             _YOLO_TO_APP = {
                                 "drivers_license": "Driver's License",
-                                "passport": "Passport",
-                                "philhealth": "PhilHealth",
-                                "philid": "National ID",
-                                "senior": "Senior", #placeholder
-                                "sss": "SSS", #placeholder
-                                "tin": "TIN",
+                                "passport":        "Passport",
+                                "philhealth":      "PhilHealth",
+                                "philid":          "National ID",
+                                "senior":          "Senior Citizen",
+                                "sss":             "SSS",  # placeholder
+                                "tin":             "TIN",
                             }
                             mapped = _YOLO_TO_APP.get(clf_result.class_name)
                             if mapped:
@@ -274,8 +278,10 @@ class InferenceHandler:
                     self.run_inference_philhealth(source)
                 elif id_type == "TIN":
                     self.run_inference_tin(source)
-                elif id_type in ("Senior", "SSS"):
-                    # Scanners not yet implemented — signal done so UI doesn't freeze
+                elif id_type == "Senior Citizen":
+                    self.run_inference_senior_citizen(source)
+                elif id_type == "SSS":
+                    # Scanner not yet implemented — signal done so UI doesn't freeze
                     with self._result_lock:
                         self.inference_complete = True
 
@@ -331,8 +337,6 @@ class InferenceHandler:
         except Exception:
             pass
 
-
-
     # ------------------------------------------------------------------
     # Full OCR after detection — single-sided IDs
     # ------------------------------------------------------------------
@@ -380,7 +384,7 @@ class InferenceHandler:
         threading.Thread(target=task, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # Existing inference runners — UNCHANGED logic, FIXED flag writes
+    # Inference runners
     # ------------------------------------------------------------------
 
     def run_inference_passport(self, path: np.ndarray | str) -> None:
@@ -465,6 +469,16 @@ class InferenceHandler:
             self.inference_complete = True
         print(result)
 
+    def run_inference_senior_citizen(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_senior_citizen(path, debug=debug)
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+        print(result)
+
     # ------------------------------------------------------------------
     # Two-sided triggers (page 4 camera / page 5 upload)
     # ------------------------------------------------------------------
@@ -494,7 +508,7 @@ class InferenceHandler:
         ).start()
 
     # ------------------------------------------------------------------
-    # Format / Validate — UNCHANGED
+    # Format / Validate
     # ------------------------------------------------------------------
 
     def format_pending_response(self, result: dict, id_type: str) -> str:
@@ -578,6 +592,7 @@ class InferenceHandler:
                     f"{'─' * 23}\n"
                     f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n\n"
                 )
+
             elif id_type == "PhilHealth":
                 data = result.get("parsed", {}).get("PhilHealth/OCR", {})
                 return (
@@ -608,6 +623,24 @@ class InferenceHandler:
                     f"  TIN         : {data.get('tin', 'N/A')}\n"
                     f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n"
                     f"  Date Issued : {data.get('date_issued', 'N/A')}\n\n"
+                )
+
+            elif id_type == "Senior Citizen":
+                data = result.get("parsed", {}).get("SeniorCitizen/OCR", {})
+                return (
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name          : {data.get('name', 'N/A')}\n"
+                    f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n"
+                    f"  Age           : {data.get('age', 'N/A')}\n\n"
+                    f"  ADDRESS\n"
+                    f"{'─' * 23}\n"
+                    f"  Address       : {data.get('address', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  ID Number     : {data.get('id_number', 'N/A')}\n"
+                    f"  Date Issued   : {data.get('date_of_issue', 'N/A')}\n"
+                    f"  Issuing Office: {data.get('issuing_office', 'N/A')}\n\n"
                 )
 
         except Exception as e:
@@ -754,6 +787,34 @@ class InferenceHandler:
             return True
         except Exception as e:
             print(f"[validate_tin_result_sync] Error: {e}")
+            return False
+
+    def validate_senior_citizen_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        try:
+            data = result.get("parsed", {}).get("SeniorCitizen/OCR", {})
+            if not data:
+                QMessageBox.warning(p, "Scan Failed",
+                                    "No Senior Citizen ID data was detected.\n\n"
+                                    "Please upload a clearer image or recapture.")
+                return False
+
+            missing = []
+            if not (data.get("name") or "").strip():
+                missing.append("Name")
+            if not (data.get("id_number") or "").strip():
+                missing.append("ID Number")
+
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                                    f"The following required fields were not detected:\n\n"
+                                    f"{', '.join(missing)}\n\n"
+                                    f"Please upload a clearer image or recapture.")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"[validate_senior_citizen_result_sync] Error: {e}")
             return False
 
     @staticmethod

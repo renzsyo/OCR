@@ -29,9 +29,6 @@ class MainWindow(QMainWindow):
         self.detected_id_type = None  # set by InferenceHandler after front detection
         self._last_method = "Unknown"  # set when user picks method on home page
 
-        # Pre-initialize Supabase client on the main thread before any
-        # background inference threads start. Lazy init inside a worker
-        # thread races with PyTorch/CUDA and causes 0xC0000409 on Windows.
         try:
             from IDscanner.db_handler import init_client_on_main_thread
             init_client_on_main_thread()
@@ -302,6 +299,8 @@ class MainWindow(QMainWindow):
             return self.inference.validate_philhealth_result_sync(result)
         elif id_type == "TIN":
             return self.inference.validate_tin_result_sync(result)
+        elif id_type == "Senior Citizen":
+            return self.inference.validate_senior_citizen_result_sync(result)
         return True
 
     def go_to_review(self) -> None:

@@ -8,4 +8,5 @@ from .scan_national_id import (
 )
 from .scan_philhealth import scan_philhealth
 from .scan_tin import scan_tin
+from .scan_senior_citizen import scan_senior_citizen
 from .ocr_engine import ocr_predict

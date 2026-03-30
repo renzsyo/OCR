@@ -167,7 +167,12 @@ class CamHandler:
             self._mv_handle = handle
 
             mvsdk.CameraSetIspOutFormat(handle, mvsdk.CAMERA_MEDIA_TYPE_BGR8)
-
+            config_path = os.path.join(os.path.dirname(__file__), "new_config.config")
+            if os.path.exists(config_path):
+                mvsdk.CameraReadParameterFromFile(handle, config_path)
+                print(f"[CamHandler/_mv_start] Loaded camera config: {config_path}")
+            else:
+                print(f"[CamHandler/_mv_start] Config not found, using defaults: {config_path}")
             capability = mvsdk.CameraGetCapability(handle)
             buf_size = (
                 capability.sResolutionRange.iWidthMax

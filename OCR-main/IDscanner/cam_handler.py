@@ -37,7 +37,7 @@ BUGFIXES (latest):
                              steps run independently even if the first raises
   - FIXED   [start_camera]:  Resets _stopping=False on restart for clean state
 """
-import cv2, time
+import cv2, time, os
 import numpy as np
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -58,7 +58,7 @@ except Exception as e:
 # ── YOLO detector (live preview bounding box + crop-on-capture) ──────────────
 # This is the DETECTION model that finds the ID card in the frame.
 # It is different from the CLASSIFICATION model in id_classifier.py.
-_DETECTOR_PATH = "D:/IDscanner/ID detection/runs/detect/runs/id_card/train_v1/weights/best.pt"
+_DETECTOR_PATH = os.path.join(os.path.dirname(__file__), "AI models", "best.pt")
 _DETECT_CONF   = 0.25
 _DETECT_IOU    = 0.45
 

@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import QMessageBox
 from .inference import (
     scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
+    scan_philhealth, scan_tin
 )
 # ADDED: YOLO classifier + Grad-CAM (runs after classify_id_type in run_front_detection)
 try:
@@ -232,11 +233,12 @@ class InferenceHandler:
                         if id_type is None and clf_result.class_name != "Uncertain":
                             _YOLO_TO_APP = {
                                 "drivers_license": "Driver's License",
-                                "passport":        "Passport",
-                                "philhealth":      "National ID",
-                                "philid":          "National ID",
-                                "senior":          "National ID",
-                                "sss":             "National ID",
+                                "passport": "Passport",
+                                "philhealth": "PhilHealth",
+                                "philid": "National ID",
+                                "senior": "Senior", #placeholder
+                                "sss": "SSS", #placeholder
+                                "tin": "TIN",
                             }
                             mapped = _YOLO_TO_APP.get(clf_result.class_name)
                             if mapped:
@@ -268,6 +270,14 @@ class InferenceHandler:
                     self.run_inference_passport(source)
                 elif id_type == "Driver's License":
                     self.run_inference_driver_license(source)
+                elif id_type == "PhilHealth":
+                    self.run_inference_philhealth(source)
+                elif id_type == "TIN":
+                    self.run_inference_tin(source)
+                elif id_type in ("Senior", "SSS"):
+                    # Scanners not yet implemented — signal done so UI doesn't freeze
+                    with self._result_lock:
+                        self.inference_complete = True
 
         except Exception as e:
             print(f"[FrontDetection] Error: {e}")
@@ -405,13 +415,23 @@ class InferenceHandler:
             "match": match_result,
             "valid": qr_result.get("valid", False) and match_result.get("passed", False),
         }
-        # FIXED: same lock protection
+
+        back_gradcam_path = None
+        if getattr(p, "debug_mode", False):
+            try:
+                from .id_classifier import classify_and_gradcam_back as _cag_back
+                back_img = cv2.imread(back_image) if isinstance(back_image, str) else back_image
+                if back_img is not None:
+                    back_gradcam_path = _cag_back(back_img)
+            except Exception as _e:
+                print(f"[NationalID] Back Grad-CAM failed (non-fatal): {_e}")
+
         with self._result_lock:
             p.pendingResponse = payload
             p.pendingDebugImage = front_result.get("debug_image")
             p.pendingDebugImageBack = qr_result.get("debug_image")
+            p._gradcam_path_back = back_gradcam_path
             self.ni_inference_complete = True
-        print(payload)
 
     def run_inference_driver_license(self, path: np.ndarray | str) -> None:
         p = self.parent
@@ -425,11 +445,29 @@ class InferenceHandler:
             self.inference_complete = True
         print(result)
 
+    def run_inference_philhealth(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_philhealth(path, debug=debug)
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+        print(result)
+
+    def run_inference_tin(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_tin(path, debug=debug)
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+        print(result)
+
     # ------------------------------------------------------------------
     # Two-sided triggers (page 4 camera / page 5 upload)
     # ------------------------------------------------------------------
-
-
 
     def infer_only_national_id_camera(self) -> None:
         p = self.parent
@@ -630,6 +668,24 @@ class InferenceHandler:
         except Exception as e:
             print(f"[validate_national_id_result_sync] Error: {e}")
             return False
+
+    def validate_philhealth_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        data = result.get("parsed", {}).get("PhilHealth/OCR", {})
+        if not data or not data.get("philhealth_id_number"):
+            QMessageBox.warning(p, "Scan Failed",
+                                "No PhilHealth ID number detected.\n\nPlease upload a clearer image.")
+            return False
+        return True
+
+    def validate_tin_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        data = result.get("parsed", {}).get("TIN/OCR", {})
+        if not data or not data.get("tin"):
+            QMessageBox.warning(p, "Scan Failed",
+                                "No TIN number detected.\n\nPlease upload a clearer image.")
+            return False
+        return True
 
     @staticmethod
     def match_national_id(qr_result: dict, front_result: dict) -> dict:

@@ -135,6 +135,7 @@ class PdfPreviewHandler:
             scan_passport, scan_national_id_back,
             scan_national_id_front, scan_national_id_front_from_ocr,
             scan_driver_license,
+            scan_philhealth, scan_tin
         )
         from .inference_handler import InferenceHandler
 
@@ -229,6 +230,12 @@ class PdfPreviewHandler:
             elif id_type == "Driver's License":
                 result = scan_driver_license(scan_front, debug=debug)
 
+            elif id_type == "PhilHealth":
+                result = scan_philhealth(scan_front, debug=debug)
+
+            elif id_type == "TIN":
+                result = scan_tin(scan_front, debug=debug)
+
             else:
                 result = {}
 
@@ -257,6 +264,17 @@ class PdfPreviewHandler:
 
         print("[PdfPreviewHandler] scan done")
         page_ids = [id(pg) for pg in pages]
+
+        if debug and scan_front is not None and id_type in ("National ID", "UMID"):
+            try:
+                from .id_classifier import classify_and_gradcam_back as _cag_back
+                back_gradcam_path = _cag_back(scan_back)
+                self.parent._gradcam_path_back = back_gradcam_path
+            except Exception as _e:
+                print(f"[PdfPreviewHandler] Back Grad-CAM failed (non-fatal): {_e}")
+                self.parent._gradcam_path_back = None
+        else:
+            self.parent._gradcam_path_back = None
         debug_info = {
             "id_type": id_type,
             "page_count": len(pages),

@@ -298,6 +298,10 @@ class MainWindow(QMainWindow):
             return self.inference.validate_driver_license_result_sync(result)
         elif id_type in ("National ID", "UMID"):
             return self.inference.validate_national_id_result_sync(result)
+        elif id_type == "PhilHealth":
+            return self.inference.validate_philhealth_result_sync(result)
+        elif id_type == "TIN":
+            return self.inference.validate_tin_result_sync(result)
         return True
 
     def go_to_review(self) -> None:

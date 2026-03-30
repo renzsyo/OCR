@@ -111,6 +111,7 @@ class ReviewHandler:
                         back_debug_path = "debug_national_id_back.png"
                     print(f"[DEBUG] calling _save_scan front={front_path} debug={debug_path} back_debug={back_debug_path}")
                     gradcam_path = getattr(p, "_gradcam_path", None)
+                    gradcam_back_path = getattr(p, "_gradcam_path_back", None)
                     _save_scan(
                         id_type     = selected_id,
                         method      = method,
@@ -120,6 +121,7 @@ class ReviewHandler:
                         debug_path  = debug_path,
                         back_debug_path=back_debug_path,
                         gradcam_path = gradcam_path,
+                        gradcam_back_path = gradcam_back_path,
                     )
                     print("[DEBUG] _save_scan returned")
                 except Exception as e:
@@ -145,43 +147,44 @@ class ReviewHandler:
         # Tab widgets are built from the in-memory arrays, so file deletion
         # timing no longer causes a crash.
             # ── PDF Debug tab (only when debug_mode is on and method was PDF) ──
-            pdf_debug = getattr(p, "_pdf_debug_info", None)
-            if getattr(p, "debug_mode", False) and pdf_debug:
-                p._pdf_debug_info = None  # clear so it doesn't bleed into next session
-                try:
-                    lines = [
-                        f"PDF DEBUG INFORMATION",
-                        f"{'─' * 35}",
-                        f"  ID Type Detected : {pdf_debug.get('id_type', 'N/A')}",
-                        f"  Total Pages      : {pdf_debug.get('page_count', 'N/A')}",
-                        f"  Detected on Page : {pdf_debug.get('detected_page', 'N/A')}",
-                        f"  Front Assigned   : Page {pdf_debug.get('front_page', 'N/A')}",
-                        f"  Back Assigned    : Page {pdf_debug.get('back_page', 'N/A')}",
-                        f"",
-                        f"RAW SCAN RESULT",
-                        f"{'─' * 35}",
-                    ]
-                    import json
-                    raw = pdf_debug.get("raw_result", {})
-                    lines.append(json.dumps(raw, indent=2, default=str))
+        pdf_debug = getattr(p, "_pdf_debug_info", None)
+        if getattr(p, "debug_mode", False) and pdf_debug:
+            p._pdf_debug_info = None  # clear so it doesn't bleed into next session
+            try:
+                lines = [
+                    f"PDF DEBUG INFORMATION",
+                    f"{'─' * 35}",
+                    f"  ID Type Detected : {pdf_debug.get('id_type', 'N/A')}",
+                    f"  Total Pages      : {pdf_debug.get('page_count', 'N/A')}",
+                    f"  Detected on Page : {pdf_debug.get('detected_page', 'N/A')}",
+                    f"  Front Assigned   : Page {pdf_debug.get('front_page', 'N/A')}",
+                    f"  Back Assigned    : Page {pdf_debug.get('back_page', 'N/A')}",
+                    f"",
+                    f"RAW SCAN RESULT",
+                    f"{'─' * 35}",
+                ]
+                import json
+                raw = pdf_debug.get("raw_result", {})
+                lines.append(json.dumps(raw, indent=2, default=str))
 
-                    debug_text = "\n".join(lines)
+                debug_text = "\n".join(lines)
 
-                    from PyQt6.QtWidgets import QTextEdit
-                    debug_widget = QWidget()
-                    layout = QVBoxLayout(debug_widget)
-                    text_box = QTextEdit()
-                    text_box.setReadOnly(True)
-                    text_box.setPlainText(debug_text)
-                    text_box.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
-                    layout.addWidget(text_box)
-                    p.reviewTabWidget.addTab(debug_widget, "PDF Debug Info")
-                except Exception as e:
-                    print(f"[ReviewHandler] PDF debug tab error: {e}")
+                from PyQt6.QtWidgets import QTextEdit
+                debug_widget = QWidget()
+                layout = QVBoxLayout(debug_widget)
+                text_box = QTextEdit()
+                text_box.setReadOnly(True)
+                text_box.setPlainText(debug_text)
+                text_box.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+                layout.addWidget(text_box)
+                p.reviewTabWidget.addTab(debug_widget, "PDF Debug Info")
+            except Exception as e:
+                print(f"[ReviewHandler] PDF debug tab error: {e}")
 
         debug_frame   = None
         debug_frame_back = None
         gradcam_frame = None
+        gradcam_frame_back = None
         clf_result_tab = None
 
         if getattr(p, "debug_mode", False) and getattr(p, "pendingDebugImage", None):
@@ -198,6 +201,13 @@ class ReviewHandler:
         if getattr(p, "debug_mode", False) and _gradcam_path and os.path.exists(_gradcam_path):
             gradcam_frame  = cv2.imread(_gradcam_path)
             clf_result_tab = getattr(p, "_classifier_result", None)
+            p._gradcam_path      = None
+            p._classifier_result = None
+
+        _gradcam_path_back = getattr(p, "_gradcam_path_back", None)
+        if getattr(p, "debug_mode", False) and _gradcam_path_back and os.path.exists(_gradcam_path_back):
+            gradcam_frame_back = cv2.imread(_gradcam_path_back)
+        p._gradcam_path_back = None
 
         # Always clear to prevent stale data bleeding into next session
         p._gradcam_path      = None
@@ -220,7 +230,11 @@ class ReviewHandler:
                 cv2.putText(gradcam_frame, label, (10, gradcam_frame.shape[0] - 15),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2)
             tab = ReviewHandler.frame_to_tab(gradcam_frame)
-            p.reviewTabWidget.addTab(tab, "Grad-CAM")
+            p.reviewTabWidget.addTab(tab, "Grad-CAM - Front")
+
+        if gradcam_frame_back is not None:
+            tab = ReviewHandler.frame_to_tab(gradcam_frame_back)
+            p.reviewTabWidget.addTab(tab, "Grad-CAM - Back")
 
     def add_file_tab(self, file_info: dict, tab_name: str) -> None:
         p = self.parent

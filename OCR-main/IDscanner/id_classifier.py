@@ -14,12 +14,6 @@ The Grad-CAM overlay is saved to a temp file. Its path is stored on
 the parent window as p._gradcam_path so review_handler can add it
 as an extra tab without any structural changes to the review page.
 
-HOW TO DROP IN:
-  1. Place this file inside IDscanner/ (same folder as the other handlers).
-  2. In inference_handler.py, add one import and one call inside
-     run_front_detection() — see the comments marked ADD IN HANDLER below.
-  3. In review_handler.py, add one block inside show_review_page() —
-     see the comment marked ADD IN REVIEW below.
 """
 
 from __future__ import annotations
@@ -37,11 +31,12 @@ from ultralytics import YOLO
 # ─────────────────────────────────────────────
 #  CONFIG — adjust paths if needed
 # ─────────────────────────────────────────────
-_CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__),"classifybest.pt")
+_CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__),"AI models", "classifybest.pt")
 _CLASS_NAMES     = ["drivers_license", "passport", "philhealth", "philid", "senior", "sss"]
 _CONF_THRESHOLD  = 0.80          # below this → class_name = "Uncertain"
-_GRADCAM_DIR     = os.path.join("IDscanner", "output", "gradcam")
+_GRADCAM_DIR = os.path.join(os.path.dirname(__file__), "output", "gradcam")
 _GRADCAM_TMPFILE = os.path.join(_GRADCAM_DIR, "_gradcam_latest.jpg")
+_GRADCAM_BACK_TMPFILE = os.path.join(_GRADCAM_DIR, "_gradcam_back_latest.jpg")
 
 # Preprocessing for Grad-CAM tensor
 _TRANSFORM = transforms.Compose([
@@ -53,7 +48,6 @@ _TRANSFORM = transforms.Compose([
 
 os.makedirs(_GRADCAM_DIR, exist_ok=True)
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 # ─────────────────────────────────────────────
 #  RESULT DATACLASS
@@ -70,7 +64,7 @@ class ClassifyResult:
 #  LAZY-LOADED SINGLETON
 # ─────────────────────────────────────────────
 _classifier: YOLO | None      = None
-_gradcam:    "_YOLOGradCAM | None" = None
+_gradcam: "YOLOGradCAM | None" = None
 _load_error: str | None       = None   # set if model fails to load; suppresses retries
 
 
@@ -92,7 +86,7 @@ def _ensure_loaded() -> bool:
     try:
         print("[IDClassifier] Loading YOLO classifier...")
         _classifier = YOLO(_CLASSIFIER_PATH)
-        _gradcam    = _YOLOGradCAM(_classifier)
+        _gradcam    = YOLOGradCAM(_classifier)
         print("[IDClassifier] Ready.")
         return True
     except Exception as e:
@@ -106,7 +100,7 @@ def _ensure_loaded() -> bool:
 # ─────────────────────────────────────────────
 #  GRAD-CAM
 # ─────────────────────────────────────────────
-class _YOLOGradCAM:
+class YOLOGradCAM:
     def __init__(self, classifier: YOLO) -> None:
         self._model      = classifier.model
         self._gradients  = None
@@ -171,11 +165,6 @@ def classify_and_gradcam(image: np.ndarray) -> ClassifyResult | None:
     Returns
     -------
     ClassifyResult or None if the model is not available.
-
-    Notes
-    -----
-    Runs entirely on the calling thread. Call from a background thread
-    (e.g. run_front_detection) so it never blocks Qt.
     """
     if not _ensure_loaded():
         return None
@@ -215,9 +204,27 @@ def classify_and_gradcam(image: np.ndarray) -> ClassifyResult | None:
                 os.remove(tmp_in)
         except Exception:
             pass
+def classify_and_gradcam_back(image: np.ndarray) -> str | None:
+    if not _ensure_loaded():
+        return None
+    try:
+        tmp_in = os.path.join(_GRADCAM_DIR, "_tmp_classify_back_in.jpg")
+        cv2.imwrite(tmp_in, image)
+        result = _classifier(tmp_in, verbose=False)[0]
+        class_idx = int(result.probs.top1)
+        return _run_gradcam(image, class_idx, output_path=_GRADCAM_BACK_TMPFILE)
+    except Exception as e:
+        print(f"[IDClassifier] classify_and_gradcam_back error: {e}")
+        return None
+    finally:
+        try:
+            if os.path.exists(tmp_in):
+                os.remove(tmp_in)
+        except Exception:
+            pass
 
 
-def _run_gradcam(image: np.ndarray, class_idx: int) -> str | None:
+def _run_gradcam(image: np.ndarray, class_idx: int, output_path: str = _GRADCAM_TMPFILE) -> str | None:
     """Generate Grad-CAM overlay, save to _GRADCAM_TMPFILE, return path."""
     try:
         crop_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -244,9 +251,9 @@ def _run_gradcam(image: np.ndarray, class_idx: int) -> str | None:
         cv2.putText(overlay, label, (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2)
 
-        cv2.imwrite(_GRADCAM_TMPFILE, overlay)
+        cv2.imwrite(output_path, overlay)
         print(f"[IDClassifier] Grad-CAM saved → {_GRADCAM_TMPFILE}")
-        return _GRADCAM_TMPFILE
+        return output_path
 
     except Exception as e:
         print(f"[IDClassifier] Grad-CAM failed: {e}")

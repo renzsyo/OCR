@@ -13,7 +13,7 @@ imported safe_resize/draw_bounding_boxes back from inference.py.
 
 import cv2
 import numpy as np
-
+from .ocr_engine import ocr_predict
 
 def safe_resize(image: np.ndarray, max_w: int = 1200) -> np.ndarray:
     """Downscale image so its width does not exceed max_w. Preserves aspect ratio."""
@@ -42,3 +42,15 @@ def draw_bounding_boxes(image: np.ndarray, ocr_results: list[dict]) -> np.ndarra
             cv2.putText(debug_img, label, (x, y - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
     return debug_img
+def extract_lines(image: np.ndarray) -> list[str]:
+    ocr_results = ocr_predict(image)
+    lines = []
+    for block in ocr_results:
+        if block:
+            rec_texts  = block.get("rec_texts", [])
+            rec_scores = block.get("rec_scores", [])
+            for text, score in zip(rec_texts, rec_scores):
+                text = text.strip()
+                if text and score > 0.5:
+                    lines.append(text)
+    return lines

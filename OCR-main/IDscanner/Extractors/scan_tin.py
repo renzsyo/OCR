@@ -9,7 +9,7 @@ import re, cv2
 import numpy as np
 
 from .ocr_engine import ocr_predict
-from .utils import safe_resize
+from .utils import safe_resize, extract_lines
 
 # ── Regex Patterns ────────────────────────────────────────────────────────────
 
@@ -137,18 +137,7 @@ def parse_tin_fields(lines: list[str]) -> dict:
 
 # ── OCR Extraction ────────────────────────────────────────────────────────────
 
-def extract_lines(image: np.ndarray) -> list[str]:
-    ocr_results = ocr_predict(image)
-    lines = []
-    for block in ocr_results:
-        if block:
-            rec_texts  = block.get("rec_texts", [])
-            rec_scores = block.get("rec_scores", [])
-            for text, score in zip(rec_texts, rec_scores):
-                text = text.strip()
-                if text and score > 0.5:
-                    lines.append(text)
-    return lines
+
 
 
 # ── Public Scan Function ──────────────────────────────────────────────────────

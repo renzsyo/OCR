@@ -9,21 +9,7 @@ import re, cv2
 import numpy as np
 
 from .ocr_engine import ocr_predict
-from .utils import safe_resize
-
-
-def extract_lines(image: np.ndarray) -> list[str]:
-    """Run OCR and return a flat list of text lines."""
-    ocr_results = ocr_predict(image)
-    lines = []
-    for block in ocr_results:
-        if block:
-            for text in block.get("rec_texts", []):
-                text = text.strip()
-                if text:
-                    lines.append(text)
-    return lines
-
+from .utils import safe_resize, extract_lines
 
 def parse_philhealth_fields(lines: list[str]) -> dict:
     data = {

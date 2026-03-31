@@ -27,7 +27,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms
 
-from Extractors import (
+from .Extractors import (
     scan_passport,
     scan_driver_license,
     scan_national_id_front,
@@ -37,6 +37,7 @@ from Extractors import (
     scan_philhealth,
     scan_tin,
     scan_senior_citizen,
+    scan_sss,
     ocr_predict,
 )
 
@@ -168,7 +169,7 @@ CLASSIFIER_LABELS = {
     2: "PhilHealth",
     3: "National ID",
     4: "Senior Citizen",
-    5: "SSS",         # placeholder — no scanner yet
+    5: "SSS",
     6: "TIN",
 }
 CLASSIFIER_CONFIDENCE_THRESHOLD = 0.90
@@ -323,6 +324,12 @@ def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
                   or "OFFICE FOR SENIOR" in texts):
                 print(f"[auto_detect] Page {i + 1}: Senior Citizen (keywords)")
                 results.append(("Senior Citizen", i, ocr_results))
+                used_indices.add(i)
+
+            elif ("SOCIAL SECURITY SYSTEM" in texts or "SSS" in texts
+                  or "PROUD TO BE A FILIPINO" in texts):
+                print(f"[auto_detect] Page {i + 1}: SSS (keywords)")
+                results.append(("SSS", i, ocr_results))
                 used_indices.add(i)
 
             else:

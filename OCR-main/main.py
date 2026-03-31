@@ -5,6 +5,7 @@ from IDscanner import CamHandler, FileManager, InferenceHandler, ReviewHandler, 
 from IDscanner.pdf_preview_handler import PdfPreviewHandler
 from IDscanner.file_handler import convert_pdf_pages
 from PyQt6.QtCore import Qt
+import threading
 
 
 class MainWindow(QMainWindow):
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
         self.inference = InferenceHandler(self)
         self.review = ReviewHandler(self)
 
+
         UiLoader(self)
 
         self.pdf_preview = PdfPreviewHandler(self)
@@ -60,6 +62,21 @@ class MainWindow(QMainWindow):
             self.pdfDetectionStatus = QLabel()  # dummy so handler never crashes
 
         self.page_history = []
+
+        threading.Thread(target=self.warmup_ocr, daemon=True).start()
+
+    def warmup_ocr(self) -> None:
+        try:
+            import numpy as np
+            from IDscanner.Extractors.ocr_engine import ocr_predict
+            from IDscanner.Extractors.ocr_engine import get_ocr
+
+            dummy = np.zeros((100, 300, 3), dtype=np.uint8)
+            ocr_predict(dummy)
+            print("[Warmup] PaddleOCR fully warmed up.")
+
+        except Exception as e:
+            print(f"[Warmup] Warmup failed (non-fatal): {e}")
 
     def go_back(self) -> None:
         if not self.page_history:
@@ -301,6 +318,8 @@ class MainWindow(QMainWindow):
             return self.inference.validate_tin_result_sync(result)
         elif id_type == "Senior Citizen":
             return self.inference.validate_senior_citizen_result_sync(result)
+        elif id_type == "SSS":
+            return self.inference.validate_sss_result_sync(result)
         return True
 
     def go_to_review(self) -> None:

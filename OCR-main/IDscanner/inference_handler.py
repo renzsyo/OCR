@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import QMessageBox
 from .inference import (
     scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
-    scan_philhealth, scan_tin, scan_senior_citizen
+    scan_philhealth, scan_tin, scan_senior_citizen, scan_sss
 )
 # ADDED: YOLO classifier + Grad-CAM (runs after classify_id_type in run_front_detection)
 try:
@@ -281,9 +281,9 @@ class InferenceHandler:
                 elif id_type == "Senior Citizen":
                     self.run_inference_senior_citizen(source)
                 elif id_type == "SSS":
-                    # Scanner not yet implemented — signal done so UI doesn't freeze
-                    with self._result_lock:
-                        self.inference_complete = True
+                    self.run_inference_sss(source)
+
+                self.inference_complete = True
 
         except Exception as e:
             print(f"[FrontDetection] Error: {e}")
@@ -479,6 +479,16 @@ class InferenceHandler:
             self.inference_complete = True
         print(result)
 
+    def run_inference_sss(self, path: np.ndarray | str) -> None:
+        p = self.parent
+        debug = getattr(p, "debug_mode", False)
+        result = scan_sss(path, debug=debug)
+        with self._result_lock:
+            p.pendingResponse = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+        print(result)
+
     # ------------------------------------------------------------------
     # Two-sided triggers (page 4 camera / page 5 upload)
     # ------------------------------------------------------------------
@@ -641,6 +651,18 @@ class InferenceHandler:
                     f"  ID Number     : {data.get('id_number', 'N/A')}\n"
                     f"  Date Issued   : {data.get('date_of_issue', 'N/A')}\n"
                     f"  Issuing Office: {data.get('issuing_office', 'N/A')}\n\n"
+                )
+
+            elif id_type == "SSS":
+                data = result.get("parsed", {}).get("SSS/OCR", {})
+                return (
+                    f"👤 PERSONAL INFORMATION\n"
+                    f"{'─' * 23}\n"
+                    f"  Name          : {data.get('name', 'N/A')}\n"
+                    f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n\n"
+                    f"  ID DETAILS\n"
+                    f"{'─' * 23}\n"
+                    f"  SSS Number    : {data.get('sss_number', 'N/A')}\n\n"
                 )
 
         except Exception as e:
@@ -815,6 +837,34 @@ class InferenceHandler:
             return True
         except Exception as e:
             print(f"[validate_senior_citizen_result_sync] Error: {e}")
+            return False
+
+    def validate_sss_result_sync(self, result: dict) -> bool:
+        p = self.parent
+        try:
+            data = result.get("parsed", {}).get("SSS/OCR", {})
+            if not data:
+                QMessageBox.warning(p, "Scan Failed",
+                                    "No SSS ID data was detected.\n\n"
+                                    "Please upload a clearer image or recapture.")
+                return False
+
+            missing = []
+            if not (data.get("sss_number") or "").strip():
+                missing.append("SSS Number")
+            if not (data.get("name") or "").strip():
+                missing.append("Name")
+
+            if missing:
+                QMessageBox.warning(p, "Incomplete Scan",
+                                    f"The following required fields were not detected:\n\n"
+                                    f"{', '.join(missing)}\n\n"
+                                    f"Please upload a clearer image or recapture.")
+                return False
+
+            return True
+        except Exception as e:
+            print(f"[validate_sss_result_sync] Error: {e}")
             return False
 
     @staticmethod

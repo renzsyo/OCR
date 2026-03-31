@@ -2,20 +2,35 @@
 inference_handler.py
 --------------------
 CHANGES FROM PREVIOUS VERSION:
-BUGFIXES (latest):
-  - FIXED   [run_front_detection]: removed redundant local imports of cv2/numpy as _cv2/_np;
-                                   was masking the module-level imports and causing confusion
-  - FIXED   [run_inference_passport/driver_license/national_id]: these set pendingResponse
-                                   and inference_complete flags from the background thread
-                                   while the main-thread timer reads them — this is a data
-                                   race. Added _result_lock (threading.Lock) to protect all
-                                   writes to pendingResponse, pendingDebugImage, and all
-                                   *_inference_complete flags. The timer now acquires the
-                                   same lock before reading the flags.
-  - ADDED   [run_front_detection]: Senior Citizen routed to run_inference_senior_citizen()
-  - ADDED   [methods]:            run_inference_senior_citizen()
-  - ADDED   [format_pending_response]: Senior Citizen formatting block
-  - ADDED   [validate_*]:         validate_senior_citizen_result_sync()
+  - REMOVED [run_inference_passport, run_inference_driver_license,
+             run_inference_philhealth, run_inference_tin,
+             run_inference_senior_citizen, run_inference_sss]:
+             All six single-sided inference runners were identical in
+             structure. Replaced with one generic method:
+             _run_single_sided_inference(id_type, path).
+             Driver's License still sets dl_inference_complete in addition
+             to inference_complete — handled inside the new method.
+  - REMOVED [run_full_ocr_camera, run_full_ocr_upload]:
+             Both were explicitly marked "no longer called in normal flow"
+             and only referenced the now-deleted individual runners.
+             Dead code — deleted.
+  - CHANGED [run_front_detection]: 6-branch if/elif dispatch replaced with
+             a single call to _run_single_sided_inference(id_type, source).
+             The standalone self.inference_complete = True line that followed
+             the old dispatch was removed — the flag is now set inside
+             _run_single_sided_inference under the lock, consistent with how
+             all other flags are handled.
+  - ADDED   [_SCAN_FN_MAP]: class-level dict mapping id_type strings to
+             their scan functions. Adding a new ID type in future requires
+             only one new import and one new entry here.
+  - REMOVED [validate_philhealth_result_sync, validate_tin_result_sync,
+             validate_senior_citizen_result_sync, validate_sss_result_sync]:
+             All four were structurally identical — extract a parsed dict,
+             warn if empty, check required fields, warn if any missing.
+             Replaced with one generic helper:
+             _validate_simple_id(result, parsed_key, id_label, required_fields).
+             The four public methods are kept as thin one-line wrappers so
+             all call sites in main.py remain unchanged.
 """
 
 import cv2, time, threading, os
@@ -27,7 +42,6 @@ from .inference import (
     scan_national_id_front, classify_id_type,
     scan_philhealth, scan_tin, scan_senior_citizen, scan_sss
 )
-# ADDED: YOLO classifier + Grad-CAM (runs after classify_id_type in run_front_detection)
 try:
     from .id_classifier import classify_and_gradcam as _classify_and_gradcam
     _ID_CLASSIFIER_AVAILABLE = True
@@ -44,17 +58,29 @@ TWO_SIDED_IDS = {"National ID", "UMID"}
 
 class InferenceHandler:
 
+    # ------------------------------------------------------------------
+    # Scan function dispatch table — add new ID types here only
+    # ------------------------------------------------------------------
+    _SCAN_FN_MAP = {
+        "Passport":         scan_passport,
+        "Driver's License": scan_driver_license,
+        "PhilHealth":       scan_philhealth,
+        "TIN":              scan_tin,
+        "Senior Citizen":   scan_senior_citizen,
+        "SSS":              scan_sss,
+    }
+
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
 
         self._result_lock = threading.Lock()
 
-        # Existing inference completion flags
+        # Inference completion flags
         self.inference_complete = False
         self.dl_inference_complete = False
         self.ni_inference_complete = False
 
-        #front-only detection flags
+        # Front-only detection flags
         self.detection_complete = False
         self.detection_result_type = None
         self.detection_confidence = 0.0
@@ -122,7 +148,7 @@ class InferenceHandler:
             self.on_detection_finished()
 
     # ------------------------------------------------------------------
-    # NEW: Front-only detection
+    # Front-only detection entry points
     # ------------------------------------------------------------------
 
     def infer_front_camera(self) -> None:
@@ -139,10 +165,7 @@ class InferenceHandler:
         ).start()
 
     def infer_front_upload(self) -> None:
-        """
-        Called after user uploads front image on the single-upload page.
-        CHANGED: reads from p.front_file instead of uploaded_files list.
-        """
+        """Called after user uploads front image on the single-upload page."""
         p = self.parent
         if not p.front_file:
             QMessageBox.warning(p, "No file", "Please upload an image first.")
@@ -166,12 +189,8 @@ class InferenceHandler:
         Background thread: classify the front image, then immediately run
         full OCR if it's a single-sided ID — all in the same thread so
         PyTorch and PaddleOCR never run concurrently (prevents 0xC0000409).
-
-        FIXED: removed redundant local aliases (_cv2, _np, _os) — the module-level
-        imports are already available and the aliases were misleading.
-
-        FIXED: all flag writes now go through _result_lock so the main-thread
-        timer never reads a half-written value.
+        All flag writes go through _result_lock so the main-thread timer
+        never reads a half-written value.
         """
         try:
             # Safety 1: resize large frames
@@ -191,11 +210,10 @@ class InferenceHandler:
                     self.detection_confidence = 0.0
                 return
 
-            # Step 1: try the classifier
+            # Step 1: MobileNet classifier
             id_type, confidence = classify_id_type(image)
 
-            # Step 2: if classifier inconclusive (unmapped class or low confidence),
-            # fall back to keyword OCR — this is what the old flow used to do
+            # Step 2: keyword OCR fallback if classifier is inconclusive
             if id_type is None:
                 print("[FrontDetection] Classifier inconclusive — trying keyword fallback.")
                 from .inference import auto_detect_all_ids
@@ -210,15 +228,8 @@ class InferenceHandler:
                 self.detection_confidence = confidence
             print(f"[FrontDetection] final type={id_type}, confidence={confidence:.2%}")
 
-            # ADDED: run YOLO classifier + Grad-CAM on the same frame.
-            # Result is stored on the parent so review_handler can show
-            # it as an extra tab. Runs here (background thread) so Qt is
-            # never blocked. Failures are non-fatal — the rest of the
-            # pipeline continues regardless.
-            #
-            # ALSO: if the existing MobileNet classifier + keyword fallback
-            # both came back inconclusive (id_type is None), use the YOLO
-            # classifier result for routing instead — it is more accurate.
+            # Step 2b: YOLO classifier + Grad-CAM (non-fatal, runs in same thread)
+            # Also promotes YOLO result to routing if MobileNet + keywords both failed.
             if _ID_CLASSIFIER_AVAILABLE:
                 try:
                     clf_result = _classify_and_gradcam(image)
@@ -231,9 +242,6 @@ class InferenceHandler:
                             f"({clf_result.confidence:.2%})"
                         )
 
-                        # If MobileNet + keywords failed, promote the YOLO
-                        # result to the routing decision — map its class name
-                        # to the app's expected id_type strings.
                         if id_type is None and clf_result.class_name != "Uncertain":
                             _YOLO_TO_APP = {
                                 "drivers_license": "Driver's License",
@@ -241,7 +249,7 @@ class InferenceHandler:
                                 "philhealth":      "PhilHealth",
                                 "philid":          "National ID",
                                 "senior":          "Senior Citizen",
-                                "sss":             "SSS",  # placeholder
+                                "sss":             "SSS",
                                 "tin":             "TIN",
                             }
                             mapped = _YOLO_TO_APP.get(clf_result.class_name)
@@ -261,8 +269,8 @@ class InferenceHandler:
                     print(f"[IDClassifier] Non-fatal error: {_clf_err}")
                     self.parent._gradcam_path = None
 
-            # Step 3: for single-sided IDs, run OCR immediately in this
-            # same thread so PyTorch and PaddleOCR never overlap.
+            # Step 3: for single-sided IDs, run OCR in this same thread so
+            # PyTorch and PaddleOCR never overlap.
             if id_type is not None and id_type not in TWO_SIDED_IDS:
                 p = self.parent
                 source = image
@@ -270,20 +278,7 @@ class InferenceHandler:
                     fp = p.front_file.get("path", "")
                     if fp and os.path.exists(fp):
                         source = fp
-                if id_type == "Passport":
-                    self.run_inference_passport(source)
-                elif id_type == "Driver's License":
-                    self.run_inference_driver_license(source)
-                elif id_type == "PhilHealth":
-                    self.run_inference_philhealth(source)
-                elif id_type == "TIN":
-                    self.run_inference_tin(source)
-                elif id_type == "Senior Citizen":
-                    self.run_inference_senior_citizen(source)
-                elif id_type == "SSS":
-                    self.run_inference_sss(source)
-
-                self.inference_complete = True
+                self._run_single_sided_inference(id_type, source)
 
         except Exception as e:
             print(f"[FrontDetection] Error: {e}")
@@ -308,7 +303,6 @@ class InferenceHandler:
             print(f"[FrontDetection] Detected: {id_type} ({confidence:.2%})")
 
             if id_type in TWO_SIDED_IDS:
-                # Need back side — navigate to dual page
                 if current_page == 1:
                     p.proceed_to_back_camera()
                 else:
@@ -338,73 +332,52 @@ class InferenceHandler:
             pass
 
     # ------------------------------------------------------------------
-    # Full OCR after detection — single-sided IDs
-    # ------------------------------------------------------------------
-
-    def run_full_ocr_camera(self, id_type: str) -> None:
-        """
-        Kept as fallback — camera path OCR is now run inside
-        _run_front_detection to avoid thread collision.
-        This method is no longer called in normal flow.
-        """
-        p = self.parent
-        if not hasattr(p, "captured_frame"):
-            return
-        frame = p.captured_frame.copy()
-
-        def task():
-            if id_type == "Passport":
-                self.run_inference_passport(frame)
-            elif id_type == "Driver's License":
-                self.run_inference_driver_license(frame)
-
-        p.continuep2.setEnabled(False)
-        threading.Thread(target=task, daemon=True).start()
-
-    def run_full_ocr_upload(self, id_type: str) -> None:
-        """
-        Kept as fallback — upload path OCR is now run inside
-        _run_front_detection to avoid thread collision.
-        This method is no longer called in normal flow.
-        """
-        p = self.parent
-        if not p.front_file:
-            return
-        path = p.front_file.get("path")
-        if not path or not os.path.exists(path):
-            return
-
-        def task():
-            if id_type == "Passport":
-                self.run_inference_passport(path)
-            elif id_type == "Driver's License":
-                self.run_inference_driver_license(path)
-
-        p.continuep3.setEnabled(False)
-        threading.Thread(target=task, daemon=True).start()
-
-    # ------------------------------------------------------------------
     # Inference runners
     # ------------------------------------------------------------------
 
-    def run_inference_passport(self, path: np.ndarray | str) -> None:
-        p = self.parent
+    def _run_single_sided_inference(self, id_type: str, path: "np.ndarray | str") -> None:
+        """
+        Generic runner for all single-sided ID types.
+
+        Looks up the correct scan function from _SCAN_FN_MAP, runs it,
+        then stores the result and sets the completion flag — all under
+        _result_lock so the main-thread timer never reads a partial state.
+
+        Driver's License also sets dl_inference_complete so its dedicated
+        continue buttons (continuep5 / continuep6) are enabled by the timer.
+
+        To add a new ID type: import its scan function at the top of this
+        file and add one entry to _SCAN_FN_MAP. Nothing else changes.
+        """
+        scan_fn = self._SCAN_FN_MAP.get(id_type)
+        if scan_fn is None:
+            print(f"[InferenceHandler] No scan function mapped for id_type='{id_type}'")
+            return
+
+        p     = self.parent
         debug = getattr(p, "debug_mode", False)
-        result = scan_passport(path, debug=debug)
-        # FIXED: write pendingResponse and flag under the lock so the
-        # main-thread timer cannot read a partial / stale state.
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.inference_complete = True
+        result = scan_fn(path, debug=debug)
         print(result)
 
-    def run_inference_national_id(self, front_image: np.ndarray | str,
-                                   back_image: np.ndarray | str) -> None:
-        p = self.parent
+        with self._result_lock:
+            p.pendingResponse   = result
+            p.pendingDebugImage = result.get("debug_image")
+            self.inference_complete = True
+            if id_type == "Driver's License":
+                self.dl_inference_complete = True
+
+    def run_inference_national_id(self, front_image: "np.ndarray | str",
+                                   back_image: "np.ndarray | str") -> None:
+        """
+        Two-sided runner for National ID / UMID.
+        Kept separate from _run_single_sided_inference because it involves
+        two images, a QR decode, a front/back match check, and an optional
+        back-side Grad-CAM — genuinely different from all other ID types.
+        """
+        p     = self.parent
         debug = getattr(p, "debug_mode", False)
 
-        qr_result = scan_national_id_back(back_image, debug=debug)
+        qr_result    = scan_national_id_back(back_image, debug=debug)
         print("[NationalID] QR result:", qr_result)
 
         front_result = scan_national_id_front(front_image, debug=debug)
@@ -421,7 +394,7 @@ class InferenceHandler:
         }
 
         back_gradcam_path = None
-        if getattr(p, "debug_mode", False):
+        if debug:
             try:
                 from .id_classifier import classify_and_gradcam_back as _cag_back
                 back_img = cv2.imread(back_image) if isinstance(back_image, str) else back_image
@@ -431,63 +404,11 @@ class InferenceHandler:
                 print(f"[NationalID] Back Grad-CAM failed (non-fatal): {_e}")
 
         with self._result_lock:
-            p.pendingResponse = payload
-            p.pendingDebugImage = front_result.get("debug_image")
+            p.pendingResponse       = payload
+            p.pendingDebugImage     = front_result.get("debug_image")
             p.pendingDebugImageBack = qr_result.get("debug_image")
-            p._gradcam_path_back = back_gradcam_path
+            p._gradcam_path_back    = back_gradcam_path
             self.ni_inference_complete = True
-
-    def run_inference_driver_license(self, path: np.ndarray | str) -> None:
-        p = self.parent
-        debug = getattr(p, "debug_mode", False)
-        result = scan_driver_license(path, debug=debug)
-        # FIXED: same lock protection
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.dl_inference_complete = True
-            self.inference_complete = True
-        print(result)
-
-    def run_inference_philhealth(self, path: np.ndarray | str) -> None:
-        p = self.parent
-        debug = getattr(p, "debug_mode", False)
-        result = scan_philhealth(path, debug=debug)
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.inference_complete = True
-        print(result)
-
-    def run_inference_tin(self, path: np.ndarray | str) -> None:
-        p = self.parent
-        debug = getattr(p, "debug_mode", False)
-        result = scan_tin(path, debug=debug)
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.inference_complete = True
-        print(result)
-
-    def run_inference_senior_citizen(self, path: np.ndarray | str) -> None:
-        p = self.parent
-        debug = getattr(p, "debug_mode", False)
-        result = scan_senior_citizen(path, debug=debug)
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.inference_complete = True
-        print(result)
-
-    def run_inference_sss(self, path: np.ndarray | str) -> None:
-        p = self.parent
-        debug = getattr(p, "debug_mode", False)
-        result = scan_sss(path, debug=debug)
-        with self._result_lock:
-            p.pendingResponse = result
-            p.pendingDebugImage = result.get("debug_image")
-            self.inference_complete = True
-        print(result)
 
     # ------------------------------------------------------------------
     # Two-sided triggers (page 4 camera / page 5 upload)
@@ -755,117 +676,96 @@ class InferenceHandler:
             print(f"[validate_national_id_result_sync] Error: {e}")
             return False
 
-    def validate_philhealth_result_sync(self, result: dict) -> bool:
+    def _validate_simple_id(
+        self,
+        result: dict,
+        parsed_key: str,
+        id_label: str,
+        required_fields: list[tuple[str, str]],
+    ) -> bool:
+        """
+        Generic validator for single-sided IDs whose result lives at
+        result["parsed"][parsed_key].
+
+        Parameters
+        ----------
+        result         : the pendingResponse dict
+        parsed_key     : e.g. "PhilHealth/OCR", "TIN/OCR", "SSS/OCR"
+        id_label       : human-readable name shown in warning dialogs
+        required_fields: list of (dict_key, display_name) pairs to check.
+                         A field is considered missing when its value is
+                         falsy or blank after stripping whitespace.
+
+        To add a new ID type: add one entry to _VALIDATE_CONFIG below
+        and one thin wrapper that calls this method. No other changes needed.
+        """
         p = self.parent
         try:
-            data = result.get("parsed", {}).get("PhilHealth/OCR", {})
+            data = result.get("parsed", {}).get(parsed_key, {})
             if not data:
-                QMessageBox.warning(p, "Scan Failed",
-                                    "No PhilHealth data was detected.\n\n"
-                                    "Please upload a clearer image or recapture.")
+                QMessageBox.warning(
+                    p, "Scan Failed",
+                    f"No {id_label} data was detected.\n\n"
+                    f"Please upload a clearer image or recapture.",
+                )
                 return False
 
-            missing = []
-            if not (data.get("philhealth_id_number") or "").strip():
-                missing.append("PhilHealth ID Number")
-            if not (data.get("name") or "").strip():
-                missing.append("Name")
+            missing = [
+                display
+                for field_key, display in required_fields
+                if not (data.get(field_key) or "").strip()
+            ]
 
             if missing:
-                QMessageBox.warning(p, "Incomplete Scan",
-                                    f"The following required fields were not detected:\n\n"
-                                    f"{', '.join(missing)}\n\n"
-                                    f"Please upload a clearer image or recapture.")
+                QMessageBox.warning(
+                    p, "Incomplete Scan",
+                    f"The following required fields were not detected:\n\n"
+                    f"{', '.join(missing)}\n\n"
+                    f"Please upload a clearer image or recapture.",
+                )
                 return False
 
             return True
         except Exception as e:
-            print(f"[validate_philhealth_result_sync] Error: {e}")
+            print(f"[_validate_simple_id:{parsed_key}] Error: {e}")
             return False
+
+    # Thin wrappers — call sites in main.py stay completely unchanged.
+    def validate_philhealth_result_sync(self, result: dict) -> bool:
+        return self._validate_simple_id(
+            result,
+            parsed_key      = "PhilHealth/OCR",
+            id_label        = "PhilHealth",
+            required_fields = [("philhealth_id_number", "PhilHealth ID Number"),
+                                ("name",                "Name")],
+        )
 
     def validate_tin_result_sync(self, result: dict) -> bool:
-        p = self.parent
-        try:
-            data = result.get("parsed", {}).get("TIN/OCR", {})
-            if not data:
-                QMessageBox.warning(p, "Scan Failed",
-                                    "No TIN data was detected.\n\n"
-                                    "Please upload a clearer image or recapture.")
-                return False
-
-            missing = []
-            if not (data.get("tin") or "").strip():
-                missing.append("TIN Number")
-            if not (data.get("name") or "").strip():
-                missing.append("Name")
-
-            if missing:
-                QMessageBox.warning(p, "Incomplete Scan",
-                                    f"The following required fields were not detected:\n\n"
-                                    f"{', '.join(missing)}\n\n"
-                                    f"Please upload a clearer image or recapture.")
-                return False
-
-            return True
-        except Exception as e:
-            print(f"[validate_tin_result_sync] Error: {e}")
-            return False
+        return self._validate_simple_id(
+            result,
+            parsed_key      = "TIN/OCR",
+            id_label        = "TIN",
+            required_fields = [("tin",  "TIN Number"),
+                                ("name", "Name")],
+        )
 
     def validate_senior_citizen_result_sync(self, result: dict) -> bool:
-        p = self.parent
-        try:
-            data = result.get("parsed", {}).get("SeniorCitizen/OCR", {})
-            if not data:
-                QMessageBox.warning(p, "Scan Failed",
-                                    "No Senior Citizen ID data was detected.\n\n"
-                                    "Please upload a clearer image or recapture.")
-                return False
-
-            missing = []
-            if not (data.get("name") or "").strip():
-                missing.append("Name")
-            if not (data.get("id_number") or "").strip():
-                missing.append("ID Number")
-
-            if missing:
-                QMessageBox.warning(p, "Incomplete Scan",
-                                    f"The following required fields were not detected:\n\n"
-                                    f"{', '.join(missing)}\n\n"
-                                    f"Please upload a clearer image or recapture.")
-                return False
-
-            return True
-        except Exception as e:
-            print(f"[validate_senior_citizen_result_sync] Error: {e}")
-            return False
+        return self._validate_simple_id(
+            result,
+            parsed_key      = "SeniorCitizen/OCR",
+            id_label        = "Senior Citizen ID",
+            required_fields = [("name",      "Name"),
+                                ("id_number", "ID Number")],
+        )
 
     def validate_sss_result_sync(self, result: dict) -> bool:
-        p = self.parent
-        try:
-            data = result.get("parsed", {}).get("SSS/OCR", {})
-            if not data:
-                QMessageBox.warning(p, "Scan Failed",
-                                    "No SSS ID data was detected.\n\n"
-                                    "Please upload a clearer image or recapture.")
-                return False
-
-            missing = []
-            if not (data.get("sss_number") or "").strip():
-                missing.append("SSS Number")
-            if not (data.get("name") or "").strip():
-                missing.append("Name")
-
-            if missing:
-                QMessageBox.warning(p, "Incomplete Scan",
-                                    f"The following required fields were not detected:\n\n"
-                                    f"{', '.join(missing)}\n\n"
-                                    f"Please upload a clearer image or recapture.")
-                return False
-
-            return True
-        except Exception as e:
-            print(f"[validate_sss_result_sync] Error: {e}")
-            return False
+        return self._validate_simple_id(
+            result,
+            parsed_key      = "SSS/OCR",
+            id_label        = "SSS ID",
+            required_fields = [("sss_number", "SSS Number"),
+                                ("name",       "Name")],
+        )
 
     @staticmethod
     def match_national_id(qr_result: dict, front_result: dict) -> dict:

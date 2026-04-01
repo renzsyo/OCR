@@ -28,7 +28,7 @@ from .utils import safe_resize, draw_bounding_boxes
 # ── Patterns ──────────────────────────────────────────────────────────────────
 
 _DATE_RE = re.compile(
-    r'\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4}'
+    r'\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}'
     r'|\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}'
     r'|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*'
     r'\s+\d{1,2},?\s*\d{4})\b',
@@ -143,15 +143,38 @@ def _clean_date_token(raw: str) -> str | None:
     return cleaned
 
 
+def _expand_2digit_year(date_str: str) -> str:
+    """
+    Expand a 2-digit year to 4 digits using the current-year rule.
+    If 2-digit year > current 2-digit year → 1900s (birth year).
+    If 2-digit year <= current 2-digit year → 2000s (issue year).
+    Examples (today=2026, current_yy=26):
+        "3-19-58" → 58>26 → "3-19-1958"
+        "9-25-19" → 19<=26 → "9-25-2019"
+    """
+    import datetime
+    m = re.match(r'^(\d{1,2})([-\/\.])(\d{1,2})([-\/\.])(\d{2})$', date_str.strip())
+    if not m:
+        return date_str
+    part1, sep1, part2, sep2, yy = m.groups()
+    current_yy = datetime.date.today().year % 100
+    full_year = f"19{yy}" if int(yy) > current_yy else f"20{yy}"
+    expanded = f"{part1}{sep1}{part2}{sep2}{full_year}"
+    print(f"[scan_senior_citizen] 2-digit year expanded: '{date_str}' → '{expanded}'")
+    return expanded
+
+
 def _sanitize_date(date_str: str) -> str:
     """
     Fix single-digit OCR corruption in MM-DD-YYYY style dates.
 
-    Step 1 — pre-clean noise characters mixed into digit fields
-             (e.g. '8F03-2020' → '8003-2020', '922T959' → '9221959')
-    Step 2 — range-based tens-digit correction for out-of-range month/day
-             (e.g. '80-03-2020' → '00→01-03-2020', '92-29-1959' → '12-29-1959')
+    Step 0 — expand 2-digit years to 4-digit using the current-year rule.
+    Step 1 — pre-clean noise characters mixed into digit fields.
+    Step 2 — range-based tens-digit correction for out-of-range month/day.
     """
+    # Step 0: expand 2-digit year before anything else
+    date_str = _expand_2digit_year(date_str)
+
     # Step 1: pre-clean noise characters
     cleaned = _clean_date_token(date_str)
     if cleaned and cleaned != date_str:
@@ -310,137 +333,43 @@ def _parse_address(lines: list[str]) -> str | None:
     return ', '.join(addr_parts) if addr_parts else None
 
 
-def _parse_dates(lines: list[str], age: str | None = None) -> dict[str, str | None]:
-    """
-    Extract date_of_birth and date_of_issue.
+import re
 
-    Handles:
-    - Full dates on the same line as or after a label
-    - Split dates: MM-DD- on one line, YYYY on the next
-    - Mangled issue labels (e.g. 'OEISSUE', 'OF ISSUE', 'OF-2020')
-    - Positional fallback: earlier date = birth, later date = issue
-    - Age-based DOB fallback when OCR misses the birth date entirely:
-      if we know the issue year and the cardholder's age, we can approximate
-      the birth year as issue_year - age (Senior Citizen cards are issued
-      at 60+, so the spread is small enough to be useful).
-    """
-    dob = None
-    issue = None
+def extract_dates(lines):
+    dob_candidates = []
+    doi_candidates = []
+
+    # Stricter regex: matches 1-2 digits / 1-2 digits / 2-4 digits
+    date_pattern = re.compile(r'\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\b')
 
     for i, line in enumerate(lines):
-        upper = line.upper()
+        # Search for dates in the line
+        matches = date_pattern.findall(line)
+        if matches:
+            for match in matches:
+                month, day, year = match
+                # Normalize to MM-DD-YYYY
+                month = month.zfill(2)
+                day = day.zfill(2)
+                if len(year) == 2:
+                    year = '19' + year if int(year) > 22 else '20' + year
+                date_str = f"{month}-{day}-{year}"
 
-        is_birth = ("DATE OF BIRTH" in upper or "DATE BIRTH" in upper
-                    or ("BIRTH" in upper and "ISSUE" not in upper))
-        is_issue = ("DATE OF ISSUE" in upper or "DATE ISSUE" in upper
-                    or "OF ISSUE" in upper or "OEISSUE" in upper
-                    or ("ISSUE" in upper and "DATE" in upper))
+                # Assign to DOB or Date of Issue based on label proximity
+                line_lower = line.lower()
+                prev_line = lines[i-1].lower() if i > 0 else ""
+                if "birth" in line_lower or "birth" in prev_line:
+                    dob_candidates.append(date_str)
+                elif "issue" in line_lower or "issue" in prev_line:
+                    doi_candidates.append(date_str)
+                else:
+                    # If no label nearby, store as generic candidate
+                    dob_candidates.append(date_str)
 
-        if is_birth and not dob:
-            m = _DATE_RE.search(line)
-            if m:
-                dob = _sanitize_date(m.group(1))
-                continue
-            dob = _try_split_date(lines, i)
-            if dob:
-                dob = _sanitize_date(dob)
-                continue
-            if i + 1 < len(lines):
-                m = _DATE_RE.search(lines[i + 1])
-                if m:
-                    dob = _sanitize_date(m.group(1))
-                    continue
-                dob = _try_split_date(lines, i + 1)
-                if dob:
-                    dob = _sanitize_date(dob)
-
-        if is_issue and not issue:
-            m = _DATE_RE.search(line)
-            if m:
-                issue = _sanitize_date(m.group(1))
-                continue
-            if i + 1 < len(lines):
-                m = _DATE_RE.search(lines[i + 1])
-                if m:
-                    issue = _sanitize_date(m.group(1))
-                    continue
-                issue = _try_split_date(lines, i + 1)
-                if issue:
-                    issue = _sanitize_date(issue)
-
-    # ── Fragment fallback: "OF-2020" style mangled issue date ────────────────
-    # OCR often reads "DATE OF ISSUE" as two separate tokens, leaving a fragment
-    # like "OF-2020" or "0F2019" as a standalone line.  Extract just the year.
-    if not issue:
-        for line in lines:
-            m = _ISSUE_FRAG_RE.search(line)
-            if m:
-                issue = m.group(1)   # year-only string, e.g. "2020"
-                print(f"[scan_senior_citizen] Issue date from fragment '{line}': {issue}")
-                break
-
-    # Collect ALL full dates found anywhere (including split reconstructions).
-    # Also try pre-cleaning noisy lines before running _DATE_RE so tokens like
-    # 'TZ 21959' or '922T959' can be recovered after noise removal.
-    all_dates = []
-    for i, line in enumerate(lines):
-        candidates_to_try = [line]
-        cleaned = _clean_date_token(line)
-        if cleaned and cleaned != line:
-            candidates_to_try.append(cleaned)
-        for candidate in candidates_to_try:
-            for m in _DATE_RE.finditer(candidate):
-                d = _sanitize_date(m.group(1))
-                if d not in all_dates:
-                    all_dates.append(d)
-        split_d = _try_split_date(lines, i)
-        if split_d:
-            split_d = _sanitize_date(split_d)
-            if split_d not in all_dates:
-                all_dates.append(split_d)
-
-    def year_of(d: str) -> int:
-        y = re.findall(r'\d{4}', d)
-        return int(y[0]) if y else 0
-
-    all_dates.sort(key=year_of)
-
-    if len(all_dates) >= 2:
-        if not dob:
-            dob = all_dates[0]
-        if not issue:
-            issue = all_dates[-1]
-    elif len(all_dates) == 1:
-        if not dob:
-            dob = all_dates[0]
-
-    # ── Age-based DOB fallback ────────────────────────────────────────────────
-    # When the birth date is completely absent from OCR output (common when the
-    # date is printed in a small font or in a low-contrast area), approximate the
-    # birth year from: birth_year ≈ issue_year - age.
-    # We output "~YYYY (estimated)" so it's clearly flagged as approximate.
-    if not dob and age:
-        try:
-            age_int = int(age)
-            # Prefer the issue year if we have it; otherwise use current year
-            if issue:
-                # issue may be a 4-digit string (year-only) or a full date
-                issue_years = re.findall(r'\d{4}', str(issue))
-                base_year = int(issue_years[0]) if issue_years else None
-            else:
-                import datetime
-                base_year = datetime.date.today().year
-
-            if base_year:
-                birth_year = base_year - age_int
-                dob = f"~{birth_year} (estimated)"
-                print(f"[scan_senior_citizen] DOB estimated from age {age_int} "
-                      f"and base year {base_year}: {dob}")
-        except (ValueError, TypeError):
-            pass
-
-    return {"date_of_birth": dob, "date_of_issue": issue}
-
+    # Return the first valid candidate found for each
+    dob = dob_candidates[0] if dob_candidates else None
+    doi = doi_candidates[0] if doi_candidates else None
+    return dob, doi
 
 def _parse_age(lines: list[str]) -> str | None:
     """
@@ -515,7 +444,24 @@ def _parse_issuing_office(lines: list[str]) -> str | None:
 
 def parse_senior_citizen_fields(lines: list[str]) -> dict:
     age   = _parse_age(lines)
-    dates = _parse_dates(lines, age=age)
+    dob, issue_date = extract_dates(lines)
+    dates = {
+        "date_of_birth": dob,
+        "date_of_issue": issue_date
+    }
+
+    # --- Swap DOB and Date Issued if misassigned ---
+    dob = dates["date_of_birth"]
+    issue_date = dates["date_of_issue"]
+    if dob and issue_date:
+        dob_year = int(re.findall(r'\d{4}', dob)[0])
+        issue_year = int(re.findall(r'\d{4}', issue_date)[0])
+        if dob_year > issue_year:
+            print(f"[scan_senior_citizen] Swapping DOB/Issue Date: {dob} ↔ {issue_date}")
+            dob, issue_date = issue_date, dob
+            dates["date_of_birth"] = dob
+            dates["date_of_issue"] = issue_date
+
     return {
         "id_number":      _parse_id_number(lines),
         "name":           _parse_name(lines),
@@ -525,7 +471,6 @@ def parse_senior_citizen_fields(lines: list[str]) -> dict:
         "date_of_issue":  dates["date_of_issue"],
         "issuing_office": _parse_issuing_office(lines),
     }
-
 
 # ── Public Scan Function ──────────────────────────────────────────────────────
 

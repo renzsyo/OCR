@@ -31,7 +31,7 @@ def get_ocr() -> PaddleOCR:
                 print("[OCREngine] Initializing PaddleOCR...")
                 _ocr = PaddleOCR(
                     use_doc_orientation_classify=True,
-                    use_doc_unwarping=False,
+                    use_doc_unwarping=True,
 
                     use_textline_orientation=True,
                     lang='en',

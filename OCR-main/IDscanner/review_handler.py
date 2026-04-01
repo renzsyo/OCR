@@ -344,6 +344,46 @@ class ReviewHandler:
                 ET.SubElement(details, "Issuer").text = qr_data.get("Issuer", "N/A")
                 ET.SubElement(details, "DateIssued").text = qr_data.get("DateIssued", "N/A")
 
+            elif id_type == "PhilHealth":
+                data = result.get("parsed", {}).get("PhilHealth/OCR", {}) or {}
+                personal = ET.SubElement(root, "PersonalInformation")
+                ET.SubElement(personal, "Name").text = data.get("name", "N/A")
+                ET.SubElement(personal, "Sex").text = data.get("sex", "N/A")
+                ET.SubElement(personal, "Birthday").text = data.get("date_of_birth", "N/A")
+                ET.SubElement(personal, "Address").text = data.get("address", "N/A")
+                details = ET.SubElement(root, "IDDetails")
+                ET.SubElement(details, "PhilHealthNo").text = data.get("philhealth_id_number", "N/A")
+
+            elif id_type == "TIN":
+                data = result.get("parsed", {}).get("TIN/OCR", {}) or {}
+                personal = ET.SubElement(root, "PersonalInformation")
+                ET.SubElement(personal, "Name").text = data.get("name", "N/A")
+                ET.SubElement(personal, "Birthday").text = data.get("date_of_birth", "N/A")
+                ET.SubElement(personal, "Address").text = data.get("address", "N/A")
+                details = ET.SubElement(root, "IDDetails")
+                ET.SubElement(details, "TIN").text = data.get("tin", "N/A")
+                ET.SubElement(details, "DateIssued").text = data.get("date_issued", "N/A")
+
+            elif id_type == "SSS":
+                data = result.get("parsed", {}).get("SSS/OCR", {}) or {}
+                personal = ET.SubElement(root, "PersonalInformation")
+                ET.SubElement(personal, "Name").text = data.get("name", "N/A")
+                ET.SubElement(personal, "Birthday").text = data.get("date_of_birth", "N/A")
+                details = ET.SubElement(root, "IDDetails")
+                ET.SubElement(details, "SSSNumber").text = data.get("sss_number", "N/A")
+
+            elif id_type == "Senior Citizen":
+                data = result.get("parsed", {}).get("SeniorCitizen/OCR", {}) or {}
+                personal = ET.SubElement(root, "PersonalInformation")
+                ET.SubElement(personal, "Name").text = data.get("name", "N/A")
+                ET.SubElement(personal, "Birthday").text = data.get("date_of_birth", "N/A")
+                ET.SubElement(personal, "Age").text = data.get("age", "N/A")
+                ET.SubElement(personal, "Address").text = data.get("address", "N/A")
+                details = ET.SubElement(root, "IDDetails")
+                ET.SubElement(details, "IDNumber").text = data.get("id_number", "N/A")
+                ET.SubElement(details, "DateIssued").text = data.get("date_of_issue", "N/A")
+                ET.SubElement(details, "IssuingOffice").text = data.get("issuing_office", "N/A")
+
         except Exception as e:
             print(f"[ReviewHandler/format_as_xml] Error building XML: {e}")
             error_el = ET.SubElement(root, "Error")

@@ -106,11 +106,15 @@ def extract_license_fields(
     if "License No" not in fields:
         for t in rec_texts:
             norm = normalize_text(t.strip())
-            match = re.match(r"([A-Z]\d{2}-\d{2}-\d+)\s+(\d{4}/\d{2}/\d{2})", norm)
+
+            match = re.search(
+                r"([A-Z]\d{2}-\d{2}-\d{6})(\d{4}/\d{2}/\d{2})",
+                norm
+            )
+
             if match:
                 fields["License No"] = match.group(1)
-                if "Expiration Date" not in fields:
-                    fields["Expiration Date"] = match.group(2)
+                fields["Expiration Date"] = match.group(2)
                 break
 
     return fields

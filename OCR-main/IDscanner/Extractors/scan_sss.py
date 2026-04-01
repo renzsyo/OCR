@@ -51,75 +51,67 @@ def _parse_sss_number(lines: list[str]) -> str | None:
 
 def _parse_name(lines: list[str]) -> str | None:
     """
-    SSS IDs print the name in one or two ALL-CAPS lines after the header.
+    Extract SSS cardholder name.
     Strategy:
-      1. Anchor to the 'Social Security System' line.
-      2. Collect ALL-CAPS name lines until SSS number or date is hit.
-      3. Fallback: longest ALL-CAPS line that looks like a name.
+      1. Find the SSS number.
+      2. Collect consecutive lines ABOVE it that look like name parts.
+      3. Stop if hitting header keywords.
     """
-    header_idx = None
+
     for i, line in enumerate(lines):
-        if "SOCIAL SECURITY" in line.upper() or "SECURITY SYSTEM" in line.upper():
-            header_idx = i
-            break
+        if _SSS_RE.search(line):
 
-    if header_idx is not None:
-        name_parts = []
-        for line in lines[header_idx + 1:]:
-            stripped = line.strip()
-            if _SSS_RE.search(stripped):
-                break
-            if _DATE_RE.search(stripped):
-                break
-            if any(kw in stripped.lower() for kw in _NON_NAME_KEYWORDS):
-                continue
-            if re.match(r'^[A-Z][A-Za-z\s,.\-]+$', stripped) and len(stripped) > 2:
-                name_parts.append(stripped.upper().strip())
-            elif name_parts:
-                break
-        if name_parts:
-            return " ".join(name_parts)
+            name_parts = []
 
-    # Fallback: longest ALL-CAPS line that looks like a name
-    candidates = []
-    for line in lines:
-        stripped = line.strip()
-        if (re.match(r'^[A-Z\s.\-]+$', stripped)
-                and len(stripped) > 5
-                and not any(kw in stripped.lower() for kw in _NON_NAME_KEYWORDS)):
-            candidates.append(stripped)
-    if candidates:
-        return max(candidates, key=len)
+            # walk upward from the SSS number
+            j = i - 1
+            while j >= 0:
+                candidate = lines[j].strip()
+
+                if not candidate:
+                    break
+
+                if any(kw in candidate.lower() for kw in _NON_NAME_KEYWORDS):
+                    break
+
+                # looks like a name fragment
+                if re.match(r"^[A-Z][A-Za-z\s.'\-]+$", candidate):
+                    name_parts.append(candidate)
+                else:
+                    break
+
+                j -= 1
+
+            if name_parts:
+                name_parts.reverse()
+                return " ".join(name_parts)
+
     return None
-
 
 def _parse_date_of_birth(lines: list[str]) -> str | None:
     """
-    SSS IDs print the date of birth directly below the SSS number,
-    often in long-form: 'DECEMBER 29, 1959'.
-    Find the SSS number line then check the next line, or scan all lines.
+    Extract date of birth from SSS ID.
+    Handles cases where the OCR splits the date across lines:
+    e.g.
+        DECEMBER
+        29,1959
     """
-    # Look for date immediately after SSS number
-    for i, line in enumerate(lines):
-        if _SSS_RE.search(line):
-            # Check same line
-            m = _DATE_RE.search(line)
-            if m:
-                return m.group(1)
-            # Check next lines
-            for j in range(i + 1, min(i + 4, len(lines))):
-                m = _DATE_RE.search(lines[j])
-                if m:
-                    return m.group(1)
 
-    # Fallback: first date found anywhere
-    for line in lines:
+    for i, line in enumerate(lines):
+
+        # 1️⃣ check current line normally
         m = _DATE_RE.search(line)
         if m:
             return m.group(1)
 
-    return None
+        # 2️⃣ check combined with next line
+        if i + 1 < len(lines):
+            combined = f"{line} {lines[i+1]}"
+            m = _DATE_RE.search(combined)
+            if m:
+                return m.group(1)
 
+    return None
 
 # ── Main Parser ───────────────────────────────────────────────────────────────
 

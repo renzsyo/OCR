@@ -43,9 +43,9 @@ CHANGES FROM PREVIOUS VERSION:
 
 import cv2, time, threading, os
 import numpy as np
-import pylab as p
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
+from .id_classifier import classify_and_gradcam_back as _cag_back
 from .inference import (
     scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
@@ -106,7 +106,7 @@ class InferenceHandler:
 
         # Inference completion flags
         self.inference_complete = False
-        self.dl_inference_complete = False
+
         self.ni_inference_complete = False
 
         # Front-only detection flags
@@ -371,8 +371,6 @@ class InferenceHandler:
             p.pendingResponse   = result
             p.pendingDebugImage = result.get("debug_image")
             self.inference_complete = True
-            if id_type == "Driver's License":
-                self.dl_inference_complete = True
 
     def run_inference_national_id(self, front_image: "np.ndarray | str",
                                    back_image: "np.ndarray | str") -> None:
@@ -404,7 +402,7 @@ class InferenceHandler:
         back_gradcam_path = None
         if debug:
             try:
-                from .id_classifier import classify_and_gradcam_back as _cag_back
+
                 back_img = cv2.imread(back_image) if isinstance(back_image, str) else back_image
                 if back_img is not None:
                     back_gradcam_path = _cag_back(back_img)

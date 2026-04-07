@@ -8,7 +8,6 @@ Extracts: philhealth_id_number, name, date_of_birth, sex, address.
 import re, cv2
 import numpy as np
 
-from .ocr_engine import ocr_predict
 from .utils import safe_resize, extract_lines
 
 def parse_philhealth_fields(lines: list[str]) -> dict:

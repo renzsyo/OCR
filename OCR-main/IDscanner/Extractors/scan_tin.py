@@ -8,15 +8,13 @@ Extracts: tin, name, address, date_of_birth, date_issued.
 import re, cv2
 import numpy as np
 
-from .ocr_engine import ocr_predict
-from .utils import safe_resize, extract_lines
+from .utils import safe_resize, DATE_RE, extract_lines
 
 # ── Regex Patterns ────────────────────────────────────────────────────────────
 
 _TIN_RE = re.compile(
     r'(?:TIN[:\s#]*)?([R]?\d{3}[-\s]\d{3}[-\s]\d{3}[-\s]\d{3})', re.I
 )
-_DATE_RE = re.compile(r'\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})\b')
 _ISSUED_RE = re.compile(
     r'(?:OF\s*ISSUANCE|DATE\s*OF\s*ISSUANCE|DATE\s*ISSUED)[:\s]*([0-9\/\-\.]+)', re.I
 )
@@ -60,7 +58,7 @@ def parse_name(lines: list[str]) -> str | None:
     for line in lines:
         if is_boilerplate(line):
             continue
-        if _TIN_RE.search(line) or _DATE_RE.search(line) or _ADDR_RE.search(line):
+        if _TIN_RE.search(line) or DATE_RE.search(line) or _ADDR_RE.search(line):
             continue
         if re.match(r'^[A-Z][A-Z ,.\-\']+$', line) and len(line) > 4:
             candidates.append(line)
@@ -88,13 +86,13 @@ def parse_birthdate(lines: list[str]) -> str | None:
     for line in lines:
         m = _ISSUED_RE.search(line)
         if m:
-            dm = _DATE_RE.search(m.group(1))
+            dm = DATE_RE.search(m.group(1))
             issuance_date = dm.group(1) if dm else m.group(1)
 
     for i, line in enumerate(lines):
         if _BDAY_LABEL_RE.search(line):
             for candidate in [line] + lines[i + 1: i + 4]:
-                m = _DATE_RE.search(candidate)
+                m = DATE_RE.search(candidate)
                 if m and m.group(1) != issuance_date:
                     birthdate = m.group(1)
                     break
@@ -103,7 +101,7 @@ def parse_birthdate(lines: list[str]) -> str | None:
 
     if not birthdate:
         for line in lines:
-            m = _DATE_RE.search(line)
+            m = DATE_RE.search(line)
             if m and m.group(1) != issuance_date:
                 birthdate = m.group(1)
                 break
@@ -116,11 +114,11 @@ def parse_date_issued(lines: list[str]) -> str | None:
         m = _ISSUED_RE.search(line)
         if m:
             raw = m.group(1)
-            dm  = _DATE_RE.search(raw)
+            dm  = DATE_RE.search(raw)
             return dm.group(1) if dm else raw
         m = _ISSUED_PARTIAL_RE.match(line)
         if m:
-            dm = _DATE_RE.search(m.group(1))
+            dm = DATE_RE.search(m.group(1))
             return dm.group(1) if dm else m.group(1)
     return None
 

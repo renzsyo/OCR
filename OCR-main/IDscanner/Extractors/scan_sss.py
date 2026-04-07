@@ -12,7 +12,7 @@ Extracts:
 import re, cv2
 import numpy as np
 from .ocr_engine import ocr_predict
-from .utils import safe_resize, draw_bounding_boxes
+from .utils import safe_resize, draw_bounding_boxes, DATE_RE, extract_lines
 
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
@@ -20,15 +20,7 @@ from .utils import safe_resize, draw_bounding_boxes
 # SSS number: DD-DDDDDDD-D
 _SSS_RE = re.compile(r'\b(\d{2}[-\s]\d{7}[-\s]\d{1})\b')
 
-# Full dates: "DECEMBER 29, 1959" or MM-DD-YYYY or MM/DD/YYYY
-_DATE_RE = re.compile(
-    r'\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{4}'
-    r'|\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}'
-    r'|(?:January|February|March|April|May|June|July|August|September|'
-    r'October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
-    r'\s+\d{1,2},?\s*\d{4})\b',
-    re.I
-)
+
 
 _NON_NAME_KEYWORDS = [
     "republic", "philippines", "social", "security", "system", "sss",
@@ -100,14 +92,14 @@ def _parse_date_of_birth(lines: list[str]) -> str | None:
     for i, line in enumerate(lines):
 
         # 1️⃣ check current line normally
-        m = _DATE_RE.search(line)
+        m = DATE_RE.search(line)
         if m:
             return m.group(1)
 
         # 2️⃣ check combined with next line
         if i + 1 < len(lines):
             combined = f"{line} {lines[i+1]}"
-            m = _DATE_RE.search(combined)
+            m = DATE_RE.search(combined)
             if m:
                 return m.group(1)
 
@@ -154,15 +146,7 @@ def scan_sss(image: np.ndarray | str, debug: bool = False) -> dict:
         debug_image_path = "debug_sss.png"
         cv2.imwrite(debug_image_path, debug_img)
 
-    lines = []
-    for block in (ocr_results or []):
-        if block:
-            rec_texts  = block.get("rec_texts", [])
-            rec_scores = block.get("rec_scores", [])
-            for text, score in zip(rec_texts, rec_scores):
-                text = text.strip()
-                if text and score > 0.4:
-                    lines.append(text)
+    lines = extract_lines(image, min_score=0.4)
 
     parsed = parse_sss_fields(lines)
 

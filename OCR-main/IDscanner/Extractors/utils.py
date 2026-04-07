@@ -11,9 +11,9 @@ import because inference.py imports from the scan_* modules, which in turn
 imported safe_resize/draw_bounding_boxes back from inference.py.
 """
 
-import cv2
+import cv2, re
 import numpy as np
-from .ocr_engine import ocr_predict
+
 
 def safe_resize(image: np.ndarray, max_w: int = 1200) -> np.ndarray:
     """Downscale image so its width does not exceed max_w. Preserves aspect ratio."""
@@ -42,15 +42,29 @@ def draw_bounding_boxes(image: np.ndarray, ocr_results: list[dict]) -> np.ndarra
             cv2.putText(debug_img, label, (x, y - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
     return debug_img
-def extract_lines(image: np.ndarray) -> list[str]:
+
+def extract_lines(image: "np.ndarray", min_score: float = 0.5) -> list[str]:
+    """Run OCR and return a flat list of text lines above min_score confidence."""
+    from .ocr_engine import ocr_predict   # local import avoids circular dep
     ocr_results = ocr_predict(image)
     lines = []
-    for block in ocr_results:
+    for block in (ocr_results or []):
         if block:
             rec_texts  = block.get("rec_texts", [])
             rec_scores = block.get("rec_scores", [])
             for text, score in zip(rec_texts, rec_scores):
                 text = text.strip()
-                if text and score > 0.5:
+                if text and score > min_score:
                     lines.append(text)
     return lines
+
+
+DATE_RE = re.compile(
+    r'\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}'
+    r'|\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}'
+    r'|(?:January|February|March|April|May|June|July|August|September|'
+    r'October|November|December|'
+    r'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+    r'[a-z]*\s+\d{1,2},?\s*\d{4})\b',
+    re.I
+)

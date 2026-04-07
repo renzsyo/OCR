@@ -527,72 +527,57 @@ def _merge_lines(all_line_sets: list[list[str]]) -> list[str]:
 
 
 def scan_senior_citizen(image: np.ndarray | str, debug: bool = False) -> dict:
-    """
-    Extract fields from a Philippine Senior Citizen ID image.
-
-    Returns:
-        {
-            "parsed":      {"SeniorCitizen/OCR": { ...fields... }},
-            "valid":       bool,
-            "debug_image": path | None,
-        }
-    """
     if isinstance(image, str):
         image = cv2.imread(image)
     if image is None:
-        return {
-            "parsed":      {"SeniorCitizen/OCR": {}},
-            "valid":       False,
-            "debug_image": None,
-        }
-    image = safe_resize(image)
+        return {"parsed": {"SeniorCitizen/OCR": {}}, "valid": False, "debug_image": None}
 
-    # Run OCR on multiple preprocessed variants and merge the results.
-    # This recovers date fields that the primary OCR pass misses because
-    # they sit in low-contrast coloured boxes (coloured card) or dark
-    # inverted boxes (monochrome scan).
+    image = safe_resize(image)
     variants = _preprocess_variants(image)
     all_line_sets: list[list[str]] = []
-
     primary_ocr = None
+
     for idx, variant in enumerate(variants):
         ocr_results = ocr_predict(variant)
         if idx == 0:
-            primary_ocr = ocr_results   # keep for debug overlay
+            primary_ocr = ocr_results
 
-        lines: list[str] = []
+        current_variant_lines = []
         for block in (ocr_results or []):
             if block:
-                rec_texts  = block.get("rec_texts", [])
-                rec_scores = block.get("rec_scores", [])
-                for text, score in zip(rec_texts, rec_scores):
-                    text = text.strip()
-                    if text and score > 0.4:
-                        lines.append(text)
+                for text, score in zip(block.get("rec_texts", []), block.get("rec_scores", [])):
+                    if text.strip() and score > 0.4:
+                        current_variant_lines.append(text.strip())
 
-        if lines:
-            print(f"[scan_senior_citizen] Variant {idx} lines: {lines}")
-        all_line_sets.append(lines)
+        all_line_sets.append(current_variant_lines)
 
+        # --- EARLY EXIT LOGIC ---
+        # After any pass, check if we have the "Big Three" fields.
+        # If we do, there's no need to run more expensive image processing/OCR.
+        temp_merged = _merge_lines(all_line_sets)
+        check_parsed = parse_senior_citizen_fields(temp_merged)
+
+        has_name = bool(check_parsed.get("name"))
+        has_id = bool(check_parsed.get("id_number"))
+        has_dob = bool(check_parsed.get("date_of_birth"))
+
+        if has_name and has_id and has_dob:
+            print(f"[scan_senior_citizen] Early exit triggered on Variant {idx}!")
+            break
+        # ------------------------
+
+    # Final merge and parse
     lines = _merge_lines(all_line_sets)
-
-    debug_image_path = None
-    if debug and primary_ocr:
-        debug_img = draw_bounding_boxes(image, primary_ocr)
-        debug_image_path = "debug_senior_citizen.png"
-        cv2.imwrite(debug_image_path, debug_img)
-
     parsed = parse_senior_citizen_fields(lines)
 
-    print("[scan_senior_citizen] Merged lines:")
-    for i, l in enumerate(lines):
-        print(f"  [{i}] {l}")
-    print("[scan_senior_citizen] Parsed:", parsed)
+    # Logging & Debug
+    if debug and primary_ocr:
+        debug_img = draw_bounding_boxes(image, primary_ocr)
+        cv2.imwrite("debug_senior_citizen.png", debug_img)
 
-    valid = bool(parsed.get("name") or parsed.get("id_number"))
-
+    print(f"[scan_senior_citizen] Final Parsed: {parsed}")
     return {
-        "parsed":      {"SeniorCitizen/OCR": parsed},
-        "valid":       valid,
-        "debug_image": debug_image_path,
+        "parsed": {"SeniorCitizen/OCR": parsed},
+        "valid": bool(parsed.get("name") or parsed.get("id_number")),
+        "debug_image": "debug_senior_citizen.png" if debug else None,
     }

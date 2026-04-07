@@ -246,6 +246,20 @@ def classify_id_type(image: np.ndarray) -> tuple[str | None, float]:
 # AUTO DETECT (used by pdf_preview_handler)
 # ====================================================
 
+_KEYWORD_RULES: list[tuple[str, list[str], bool]] = [
+    ("Passport", ["PASSPORT", "P<PHL", "P<"], False),
+    ("National ID", ["PCN", "PSN", "PILIPINAS", "REPUBLIKA NG PILIPINAS",
+                     "PAMBANSANG PAGKAKAKILANLAN"], True),
+    ("Driver's License", ["DRIVER", "DRIVING", "LTO", "LICENSE"], True),
+    ("PhilHealth", ["PHILHEALTH", "PHIC", "PHILIPPINE HEALTH",
+                    "MEMBER DATA RECORD"], False),
+    ("TIN", ["BUREAU OF INTERNAL REVENUE", "BIR", "TAXPAYER"], False),
+    ("Senior Citizen", ["SENIOR CITIZEN", "OSCA", "OFFICE FOR SENIOR"], False),
+    ("SSS", ["SOCIAL SECURITY SYSTEM", "SSS",
+             "PROUD TO BE A FILIPINO"], False),
+]
+
+
 def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
     """
     Scans every page and returns all IDs found as a list of
@@ -253,7 +267,9 @@ def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
 
     Detection order per page:
       1. MobileNet classifier — fast, no OCR needed if confident.
-      2. Keyword fallback     — runs OCR and checks for known ID keywords.
+      2. Keyword fallback     — runs OCR and checks against _KEYWORD_RULES.
+
+    To add a new ID type to keyword detection, add one entry to _KEYWORD_RULES.
     """
     if isinstance(pages, np.ndarray):
         pages = [pages]
@@ -268,7 +284,7 @@ def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
             # ── Step 1: classifier ────────────────────────────────────
             id_type, confidence = classify_id_type(image)
             if id_type is not None:
-                print(f"[auto_detect] Page {i+1}: {id_type} "
+                print(f"[auto_detect] Page {i + 1}: {id_type} "
                       f"(classifier, {confidence:.2%})")
                 results.append((id_type, i, None))
                 used_indices.add(i)
@@ -285,58 +301,22 @@ def auto_detect_all_ids(pages) -> list[tuple[str, int, list]]:
             if not texts.strip():
                 continue
 
-            if "PASSPORT" in texts or "P<PHL" in texts or "P<" in texts:
-                print(f"[auto_detect] Page {i+1}: Passport (keywords)")
-                results.append(("Passport", i, ocr_results))
-                used_indices.add(i)
+            matched = False
+            for rule_type, keywords, two_sided in _KEYWORD_RULES:
+                if any(kw in texts for kw in keywords):
+                    print(f"[auto_detect] Page {i + 1}: {rule_type} (keywords)")
+                    results.append((rule_type, i, ocr_results))
+                    used_indices.add(i)
+                    if two_sided and i + 1 < len(pages):
+                        used_indices.add(i + 1)
+                    matched = True
+                    break
 
-            elif ("PCN" in texts or "PSN" in texts or "PILIPINAS" in texts
-                  or "REPUBLIKA NG PILIPINAS" in texts
-                  or "PAMBANSANG PAGKAKAKILANLAN" in texts):
-                print(f"[auto_detect] Page {i+1}: National ID (keywords)")
-                results.append(("National ID", i, ocr_results))
-                used_indices.add(i)
-                if i + 1 < len(pages):
-                    used_indices.add(i + 1)
-
-            elif ("DRIVER" in texts or "DRIVING" in texts
-                  or "LTO" in texts or "LICENSE" in texts):
-                print(f"[auto_detect] Page {i+1}: Driver's License (keywords)")
-                results.append(("Driver's License", i, ocr_results))
-                used_indices.add(i)
-                if i + 1 < len(pages):
-                    used_indices.add(i + 1)
-
-            elif ("PHILHEALTH" in texts or "PHIC" in texts
-                  or "PHILIPPINE HEALTH" in texts
-                  or "MEMBER DATA RECORD" in texts):
-                print(f"[auto_detect] Page {i+1}: PhilHealth (keywords)")
-                results.append(("PhilHealth", i, ocr_results))
-                used_indices.add(i)
-
-            elif ("BUREAU OF INTERNAL REVENUE" in texts or "BIR" in texts
-                  or "TAXPAYER" in texts):
-                print(f"[auto_detect] Page {i+1}: TIN (keywords)")
-                results.append(("TIN", i, ocr_results))
-                used_indices.add(i)
-
-            elif ("SENIOR CITIZEN" in texts or "OSCA" in texts
-                  or "OFFICE FOR SENIOR" in texts):
-                print(f"[auto_detect] Page {i + 1}: Senior Citizen (keywords)")
-                results.append(("Senior Citizen", i, ocr_results))
-                used_indices.add(i)
-
-            elif ("SOCIAL SECURITY SYSTEM" in texts or "SSS" in texts
-                  or "PROUD TO BE A FILIPINO" in texts):
-                print(f"[auto_detect] Page {i + 1}: SSS (keywords)")
-                results.append(("SSS", i, ocr_results))
-                used_indices.add(i)
-
-            else:
-                print(f"[auto_detect] Page {i+1}: no match")
+            if not matched:
+                print(f"[auto_detect] Page {i + 1}: no match")
 
         except Exception as e:
-            print(f"[auto_detect] Page {i+1} error: {e}")
+            print(f"[auto_detect] Page {i + 1} error: {e}")
             continue
 
     if not results:

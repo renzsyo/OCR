@@ -27,13 +27,7 @@ from .utils import safe_resize, draw_bounding_boxes
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
 
-_DATE_RE = re.compile(
-    r'\b(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}'
-    r'|\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}'
-    r'|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*'
-    r'\s+\d{1,2},?\s*\d{4})\b',
-    re.I
-)
+
 
 # Partial date fragment: MM-DD- (year split to next line)
 _DATE_PARTIAL_RE = re.compile(r'\b(\d{1,2}[-\/]\d{1,2}[-\/])\s*$')
@@ -105,7 +99,7 @@ def _collect_multiline(lines: list[str], start: int, max_lines: int = 6) -> list
         if _is_field_label(line):
             break
         # Stop if the line contains a date — it belongs to the next field
-        if _DATE_RE.search(line):
+        if DATE_RE.search(line):
             break
         collected.append(line)
     return collected
@@ -333,42 +327,72 @@ def _parse_address(lines: list[str]) -> str | None:
     return ', '.join(addr_parts) if addr_parts else None
 
 
-import re
+def extract_dates(lines: list[str]) -> tuple[str | None, str | None]:
+    """
+    Extract date_of_birth and date_of_issue from OCR lines.
 
-def extract_dates(lines):
-    dob_candidates = []
-    doi_candidates = []
+    Dates are assigned by label proximity first:
+      - Lines containing or preceded by 'birth' → dob_candidates
+      - Lines containing or preceded by 'issue' → doi_candidates
+      - Everything else → neutral_candidates (assigned by year sort at the end)
 
-    # Stricter regex: matches 1-2 digits / 1-2 digits / 2-4 digits
+    Year expansion uses the same current-year rule as _expand_2digit_year:
+      2-digit year > current_yy → 1900s, else 2000s.
+
+    After collection, dates are sorted by year. The earlier year is dob,
+    the later year is doi. A final swap check in parse_senior_citizen_fields
+    acts as a safety net.
+    """
+    import datetime
+    current_yy = datetime.date.today().year % 100
+
+    dob_candidates     = []
+    doi_candidates     = []
+    neutral_candidates = []
+
     date_pattern = re.compile(r'\b(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})\b')
 
     for i, line in enumerate(lines):
-        # Search for dates in the line
         matches = date_pattern.findall(line)
-        if matches:
-            for match in matches:
-                month, day, year = match
-                # Normalize to MM-DD-YYYY
-                month = month.zfill(2)
-                day = day.zfill(2)
-                if len(year) == 2:
-                    year = '19' + year if int(year) > 22 else '20' + year
-                date_str = f"{month}-{day}-{year}"
+        if not matches:
+            continue
+        for match in matches:
+            month, day, year = match
+            month = month.zfill(2)
+            day   = day.zfill(2)
+            if len(year) == 2:
+                # Use dynamic current year — consistent with _expand_2digit_year
+                year = f"19{year}" if int(year) > current_yy else f"20{year}"
+            date_str = f"{month}-{day}-{year}"
 
-                # Assign to DOB or Date of Issue based on label proximity
-                line_lower = line.lower()
-                prev_line = lines[i-1].lower() if i > 0 else ""
-                if "birth" in line_lower or "birth" in prev_line:
-                    dob_candidates.append(date_str)
-                elif "issue" in line_lower or "issue" in prev_line:
-                    doi_candidates.append(date_str)
-                else:
-                    # If no label nearby, store as generic candidate
-                    dob_candidates.append(date_str)
+            line_lower = line.lower()
+            prev_line  = lines[i - 1].lower() if i > 0 else ""
 
-    # Return the first valid candidate found for each
-    dob = dob_candidates[0] if dob_candidates else None
-    doi = doi_candidates[0] if doi_candidates else None
+            if "birth" in line_lower or "birth" in prev_line:
+                dob_candidates.append(date_str)
+            elif "issue" in line_lower or "issue" in prev_line:
+                doi_candidates.append(date_str)
+            else:
+                # No label nearby — defer to year-sort assignment below
+                neutral_candidates.append(date_str)
+
+    # Assign neutral dates by year: earlier → dob, later → doi
+    def year_of(d: str) -> int:
+        y = re.findall(r'\d{4}', d)
+        return int(y[0]) if y else 0
+
+    neutral_candidates.sort(key=year_of)
+    if len(neutral_candidates) >= 2 and not dob_candidates and not doi_candidates:
+        dob_candidates.append(neutral_candidates[0])
+        doi_candidates.append(neutral_candidates[-1])
+    elif neutral_candidates:
+        if not dob_candidates:
+            dob_candidates.extend(neutral_candidates)
+        elif not doi_candidates:
+            doi_candidates.extend(neutral_candidates)
+
+    dob   = dob_candidates[0]  if dob_candidates  else None
+    doi   = doi_candidates[0]  if doi_candidates   else None
     return dob, doi
 
 def _parse_age(lines: list[str]) -> str | None:

@@ -109,24 +109,11 @@ def upload_image(
 
     try:
         filename     = os.path.basename(local_path)
-        folder_map = {
-            "Camera": "Camera",
-            "Upload": "Upload",
-            "PDF": "PDF",
-        }
-        debug_folder_map = {
-            "Camera": "Camera_debug",
-            "Upload": "Upload_debug",
-            "PDF": "PDF_debug",
-        }
-        gradcam_folder_map = {
-            "Camera": "Camera_grad",
-            "Upload": "Upload_grad",
-            "PDF": "PDF_grad",
-        }
-        method_folder = folder_map.get(method, "Upload")
-        debug_method_folder = debug_folder_map.get(method, "Upload_debug")
-        gradcam_method_folder = gradcam_folder_map.get(method, "Upload_grad")
+        _VALID_METHODS = {"Camera", "Upload", "PDF"}
+        method_key = method if method in _VALID_METHODS else "Upload"
+        method_folder = method_key
+        debug_method_folder = f"{method_key}_debug"
+        gradcam_method_folder = f"{method_key}_grad"
 
         if label in ("debug", "debug_back"):
             storage_path = f"Debug/{debug_method_folder}/{timestamp}_{label}_{filename}"

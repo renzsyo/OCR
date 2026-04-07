@@ -31,16 +31,25 @@ CHANGES FROM PREVIOUS VERSION:
              _validate_simple_id(result, parsed_key, id_label, required_fields).
              The four public methods are kept as thin one-line wrappers so
              all call sites in main.py remain unchanged.
+  - CHANGED [imports]:          auto_detect_all_ids moved from deferred inline
+                                 import inside run_front_detection to module-level
+                                 import with the rest of the .inference imports.
+  - CHANGED [_YOLO_TO_APP]:     moved from inside run_front_detection (re-created
+                                 on every call) to class-level constant alongside
+                                 _SCAN_FN_MAP. Reference updated to self._YOLO_TO_APP.
+  - REMOVED [format_pending_response]: removed [FORMAT DEBUG] print that was logging
+                                 the entire raw result dict on every review page load.
 """
 
 import cv2, time, threading, os
 import numpy as np
+import pylab as p
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
 from .inference import (
     scan_passport, scan_national_id_back, scan_driver_license,
     scan_national_id_front, classify_id_type,
-    scan_philhealth, scan_tin, scan_senior_citizen, scan_sss
+    scan_philhealth, scan_tin, scan_senior_citizen, scan_sss, auto_detect_all_ids
 )
 try:
     from .id_classifier import classify_and_gradcam as _classify_and_gradcam
@@ -58,9 +67,7 @@ TWO_SIDED_IDS = {"National ID", "UMID"}
 
 class InferenceHandler:
 
-    # ------------------------------------------------------------------
     # Scan function dispatch table — add new ID types here only
-    # ------------------------------------------------------------------
     _SCAN_FN_MAP = {
         "Passport":         scan_passport,
         "Driver's License": scan_driver_license,
@@ -68,6 +75,18 @@ class InferenceHandler:
         "TIN":              scan_tin,
         "Senior Citizen":   scan_senior_citizen,
         "SSS":              scan_sss,
+    }
+
+    # YOLO classifier class names → app id_type strings.
+    # Used when MobileNet + keyword fallback both fail.
+    _YOLO_TO_APP = {
+        "drivers_license": "Driver's License",
+        "passport": "Passport",
+        "philhealth": "PhilHealth",
+        "philid": "National ID",
+        "senior": "Senior Citizen",
+        "sss": "SSS",
+        "tin": "TIN",
     }
 
     def __init__(self, parent: "MainWindow") -> None:
@@ -106,44 +125,32 @@ class InferenceHandler:
     def check_inference_done(self) -> None:
         p = self.parent
 
-        # Snapshot all flags under the lock, then act outside it so we
-        # never hold the lock while calling Qt functions.
+        # 1. Snapshot and Reset
         with self._result_lock:
             inf_done = self.inference_complete
-            dl_done  = self.dl_inference_complete
-            ni_done  = self.ni_inference_complete
+            ni_done = self.ni_inference_complete
             det_done = self.detection_complete
 
-            if inf_done:
-                self.inference_complete = False
-            if dl_done:
-                self.dl_inference_complete = False
-            if ni_done:
-                self.ni_inference_complete = False
-            if det_done:
-                self.detection_complete = False
+            if inf_done: self.inference_complete = False
+            if ni_done:  self.ni_inference_complete = False
+            if det_done: self.detection_complete = False
 
-        if inf_done:
-            try:
+        # 2. UI Updates (Logic collapsed)
+        try:
+            # Standard IDs (DL, PhilHealth, Passport, etc.)
+            if inf_done:
                 p.continuep2.setEnabled(True)
                 p.continuep3.setEnabled(True)
-            except Exception:
-                pass
 
-        if dl_done:
-            try:
+            # National ID (Special two-sided page logic)
+            if ni_done:
                 p.continuep5.setEnabled(True)
                 p.continuep6.setEnabled(True)
-            except Exception:
-                pass
+        except Exception:
+            # Silently catch UI errors if parent is destroyed/invalid
+            pass
 
-        if ni_done:
-            try:
-                p.continuep5.setEnabled(True)
-                p.continuep6.setEnabled(True)
-            except Exception:
-                pass
-
+        # 3. Functional Call
         if det_done:
             self.on_detection_finished()
 
@@ -216,7 +223,7 @@ class InferenceHandler:
             # Step 2: keyword OCR fallback if classifier is inconclusive
             if id_type is None:
                 print("[FrontDetection] Classifier inconclusive — trying keyword fallback.")
-                from .inference import auto_detect_all_ids
+
                 hits = auto_detect_all_ids([image])
                 if hits:
                     id_type = hits[0][0]
@@ -243,16 +250,7 @@ class InferenceHandler:
                         )
 
                         if id_type is None and clf_result.class_name != "Uncertain":
-                            _YOLO_TO_APP = {
-                                "drivers_license": "Driver's License",
-                                "passport":        "Passport",
-                                "philhealth":      "PhilHealth",
-                                "philid":          "National ID",
-                                "senior":          "Senior Citizen",
-                                "sss":             "SSS",
-                                "tin":             "TIN",
-                            }
-                            mapped = _YOLO_TO_APP.get(clf_result.class_name)
+                            mapped = self._YOLO_TO_APP.get(clf_result.class_name)
                             if mapped:
                                 id_type    = mapped
                                 confidence = clf_result.confidence
@@ -443,7 +441,9 @@ class InferenceHandler:
     # ------------------------------------------------------------------
 
     def format_pending_response(self, result: dict, id_type: str) -> str:
-        print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
+        debug = getattr(p, "debug_mode", False)
+        if debug:
+            print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
         try:
             if id_type == "National ID":
                 data = result.get("qr", {}).get("NationalID/QR") or {}

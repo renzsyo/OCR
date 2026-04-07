@@ -45,8 +45,6 @@ _TRANSFORM = transforms.Compose([
 ])
 
 os.makedirs(_GRADCAM_DIR, exist_ok=True)
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 # ─────────────────────────────────────────────
 #  RESULT DATACLASS
 # ─────────────────────────────────────────────

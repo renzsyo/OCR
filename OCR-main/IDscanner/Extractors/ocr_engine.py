@@ -11,6 +11,9 @@ subsequent call. This prevents:
 All OCR calls are serialized through _ocr_lock because PaddleOCR /
 ONNX Runtime is not thread-safe — concurrent calls crash the process
 with exit code 0xC0000409 on Windows.
+
+Update 04-07-2026
+    -removed some arguments in the paddleocr initialization since those are options that are only used in 2.x versions
 """
 
 import cv2, threading
@@ -32,12 +35,8 @@ def get_ocr() -> PaddleOCR:
                 _ocr = PaddleOCR(
                     use_doc_orientation_classify=True,
                     use_doc_unwarping=False,
-
                     use_textline_orientation=True,
                     lang='en',
-                    text_det_box_thresh=0.5,
-                    text_det_thresh=0.4,
-                    text_rec_score_thresh=0.5,
                 )
                 print("[OCREngine] PaddleOCR ready.")
     return _ocr

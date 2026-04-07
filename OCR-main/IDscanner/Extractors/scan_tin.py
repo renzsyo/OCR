@@ -134,12 +134,6 @@ def parse_tin_fields(lines: list[str]) -> dict:
         "date_issued":   parse_date_issued(lines),
     }
 
-
-# ── OCR Extraction ────────────────────────────────────────────────────────────
-
-
-
-
 # ── Public Scan Function ──────────────────────────────────────────────────────
 
 def scan_tin(image: np.ndarray | str, debug: bool = False) -> dict:

@@ -89,6 +89,16 @@ class InferenceHandler:
         "tin": "TIN",
     }
 
+    _FORMAT_DISPATCH = {
+        "National ID": "_format_national_id",
+        "Driver's License": "_format_drivers_license",
+        "Passport": "_format_passport",
+        "PhilHealth": "_format_philhealth",
+        "TIN": "_format_tin",
+        "Senior Citizen": "_format_senior_citizen",
+        "SSS": "_format_sss",
+    }
+
     def __init__(self, parent: "MainWindow") -> None:
         self.parent = parent
 
@@ -439,155 +449,132 @@ class InferenceHandler:
     # ------------------------------------------------------------------
     # Format / Validate
     # ------------------------------------------------------------------
-
     def format_pending_response(self, result: dict, id_type: str) -> str:
+        p = self.parent
         debug = getattr(p, "debug_mode", False)
+
         if debug:
-            print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}, result={result}")
+            print(f"[FORMAT DEBUG] id_type='{id_type}', result type={type(result)}")
+
         try:
-            if id_type == "National ID":
-                data = result.get("qr", {}).get("NationalID/QR") or {}
-                subject = data.get("subject") or {}
-                front_fields = (
-                    result.get("front", {})
-                          .get("parsed", {})
-                          .get("NationalID/Front", {}) or {}
-                )
-                return (
-                    f"👤 PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Last Name   : {subject.get('lName') or front_fields.get('Last Name', 'N/A')}\n"
-                    f"  First Name  : {subject.get('fName') or front_fields.get('First Name', 'N/A')}\n"
-                    f"  Middle Name : {subject.get('mName') or front_fields.get('Middle Name', 'N/A')}\n"
-                    f"  Suffix      : {subject.get('Suffix') or 'None'}\n"
-                    f"  Sex         : {subject.get('sex', 'N/A')}\n"
-                    f"  Birthday    : {subject.get('DOB') or front_fields.get('DOB', 'N/A')}\n"
-                    f"  Birthplace  : {subject.get('POB', 'N/A')}\n\n"
-                    f"  Address     : {front_fields.get('Address', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n"
-                    f"  Issuer      : {data.get('Issuer', 'N/A')}\n"
-                    f"  Date Issued : {data.get('DateIssued', 'N/A')}\n\n"
-                )
-
-            elif id_type == "Driver's License":
-                data = result.get("parsed", {}).get("Driverslicense/OCR", {})
-                return (
-                    f"PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Name        : {data.get('Name', 'N/A')}\n"
-                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
-                    f"  Birthday    : {data.get('Birthdate', 'N/A')}\n"
-                    f"  Address     : {data.get('Address', 'N/A')}\n\n"
-                    f"  LICENSE DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  License No  : {data.get('License No', 'N/A')}\n"
-                    f"  Expiration  : {data.get('Expiration Date', 'N/A')}\n\n"
-                )
-
-            elif id_type == "Passport":
-                data = result.get("parsed", {}).get("Passport/MRZ", {})
-                return (
-                    f" PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Last Name   : {data.get('Surname', 'N/A')}\n"
-                    f"  First Name  : {data.get('Given_names', 'N/A')}\n"
-                    f"  Sex         : {data.get('Sex', 'N/A')}\n"
-                    f"  Birthday    : {data.get('Birth_date', 'N/A')}\n\n"
-                    f"  PASSPORT DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  Document No : {data.get('Document_number', 'N/A')}\n"
-                    f"  Nationality : {data.get('Nationality', 'N/A')}\n"
-                    f"  Country     : {data.get('Country', 'N/A')}\n"
-                    f"  Expiry Date : {data.get('Expiry_date', 'N/A')}\n\n"
-                )
-
-            elif id_type == "UMID":
-                data = result.get("qr", {}).get("NationalID/QR") or {}
-                subject = data.get("subject") or {}
-                front_fields = (
-                    result.get("front", {})
-                          .get("parsed", {})
-                          .get("NationalID/Front", {}) or {}
-                )
-                return (
-                    f"👤 PERSONAL INFORMATION (UMID)\n"
-                    f"{'─' * 23}\n"
-                    f"  Last Name   : {subject.get('lName') or front_fields.get('Last Name', 'N/A')}\n"
-                    f"  First Name  : {subject.get('fName') or front_fields.get('First Name', 'N/A')}\n"
-                    f"  Middle Name : {subject.get('mName') or front_fields.get('Middle Name', 'N/A')}\n"
-                    f"  Sex         : {subject.get('sex', 'N/A')}\n"
-                    f"  Birthday    : {subject.get('DOB') or front_fields.get('DOB', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  PCN         : {subject.get('PCN') or front_fields.get('PCN', 'N/A')}\n\n"
-                )
-
-            elif id_type == "PhilHealth":
-                data = result.get("parsed", {}).get("PhilHealth/OCR", {})
-                return (
-                    f"👤 PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Name        : {data.get('name', 'N/A')}\n"
-                    f"  Sex         : {data.get('sex', 'N/A')}\n"
-                    f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n\n"
-                    f"  ADDRESS\n"
-                    f"{'─' * 23}\n"
-                    f"  Address     : {data.get('address', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  PhilHealth No : {data.get('philhealth_id_number', 'N/A')}\n\n"
-                )
-
-            elif id_type == "TIN":
-                data = result.get("parsed", {}).get("TIN/OCR", {})
-                return (
-                    f"👤 PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Name        : {data.get('name', 'N/A')}\n\n"
-                    f"  ADDRESS\n"
-                    f"{'─' * 23}\n"
-                    f"  Address     : {data.get('address', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  TIN         : {data.get('tin', 'N/A')}\n"
-                    f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n"
-                    f"  Date Issued : {data.get('date_issued', 'N/A')}\n\n"
-                )
-
-            elif id_type == "Senior Citizen":
-                data = result.get("parsed", {}).get("SeniorCitizen/OCR", {})
-                return (
-                    f"👤 PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Name          : {data.get('name', 'N/A')}\n"
-                    f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n"
-                    f"  Age           : {data.get('age', 'N/A')}\n\n"
-                    f"  ADDRESS\n"
-                    f"{'─' * 23}\n"
-                    f"  Address       : {data.get('address', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  ID Number     : {data.get('id_number', 'N/A')}\n"
-                    f"  Date Issued   : {data.get('date_of_issue', 'N/A')}\n"
-                    f"  Issuing Office: {data.get('issuing_office', 'N/A')}\n\n"
-                )
-
-            elif id_type == "SSS":
-                data = result.get("parsed", {}).get("SSS/OCR", {})
-                return (
-                    f"👤 PERSONAL INFORMATION\n"
-                    f"{'─' * 23}\n"
-                    f"  Name          : {data.get('name', 'N/A')}\n"
-                    f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n\n"
-                    f"  ID DETAILS\n"
-                    f"{'─' * 23}\n"
-                    f"  SSS Number    : {data.get('sss_number', 'N/A')}\n\n"
-                )
+            # Get the method name from our map, default to a generic formatter if not found
+            method_name = self._FORMAT_DISPATCH.get(id_type)
+            if method_name and hasattr(self, method_name):
+                formatter = getattr(self, method_name)
+                return formatter(result)
+            else:
+                return f"⚠️ No formatter found for {id_type}.\nRaw: {result}"
 
         except Exception as e:
             return f"⚠️ Could not format result: {e}\n\nRaw output:\n{result}"
+
+    def _format_national_id(self, result: dict) -> str:
+        data = result.get("qr", {}).get("NationalID/QR") or {}
+        subject = data.get("subject") or {}
+        front = result.get("front", {}).get("parsed", {}).get("NationalID/Front", {}) or {}
+
+        return (
+            f"👤 PERSONAL INFORMATION\n{'─' * 21}\n"
+            f"  Last Name   : {subject.get('lName') or front.get('Last Name', 'N/A')}\n"
+            f"  First Name  : {subject.get('fName') or front.get('First Name', 'N/A')}\n"
+            f"  Middle Name : {subject.get('mName') or front.get('Middle Name', 'N/A')}\n"
+            f"  Suffix      : {subject.get('Suffix') or 'None'}\n"
+            f"  Sex         : {subject.get('sex', 'N/A')}\n"
+            f"  Birthday    : {subject.get('DOB') or front.get('DOB', 'N/A')}\n"
+            f"  Birthplace  : {subject.get('POB', 'N/A')}\n\n"
+            f"  Address     : {front.get('Address', 'N/A')}\n\n"
+            f"  ID DETAILS\n{'─' * 21}\n"
+            f"  PCN         : {subject.get('PCN') or front.get('PCN', 'N/A')}\n"
+            f"  Issuer      : {data.get('Issuer', 'N/A')}\n"
+            f"  Date Issued : {data.get('DateIssued', 'N/A')}\n\n"
+        )
+
+    def _format_drivers_license(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("Driverslicense/OCR", {})
+        return (
+            f"PERSONAL INFORMATION\n{'─' * 21}\n"
+            f"  Name        : {data.get('Name', 'N/A')}\n"
+            f"  Sex         : {data.get('Sex', 'N/A')}\n"
+            f"  Birthday    : {data.get('Birthdate', 'N/A')}\n"
+            f"  Address     : {data.get('Address', 'N/A')}\n\n"
+            f"  LICENSE DETAILS\n{'─' * 21}\n"
+            f"  License No  : {data.get('License No', 'N/A')}\n"
+            f"  Expiration  : {data.get('Expiration Date', 'N/A')}\n\n"
+        )
+    def _format_passport(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("Passport/MRZ", {})
+        return (
+            f" PERSONAL INFORMATION\n"
+            f"{'─' * 21}\n"
+            f"  Last Name   : {data.get('Surname', 'N/A')}\n"
+            f"  First Name  : {data.get('Given_names', 'N/A')}\n"
+            f"  Sex         : {data.get('Sex', 'N/A')}\n"
+            f"  Birthday    : {data.get('Birth_date', 'N/A')}\n\n"
+            f"  PASSPORT DETAILS\n"
+            f"{'─' * 21}\n"
+            f"  Document No : {data.get('Document_number', 'N/A')}\n"
+            f"  Nationality : {data.get('Nationality', 'N/A')}\n"
+            f"  Country     : {data.get('Country', 'N/A')}\n"
+            f"  Expiry Date : {data.get('Expiry_date', 'N/A')}\n\n"
+        )
+    def _format_philhealth(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("PhilHealth/OCR", {})
+        return (
+            f"👤 PERSONAL INFORMATION\n"
+            f"{'─' * 21}\n"
+            f"  Name        : {data.get('name', 'N/A')}\n"
+            f"  Sex         : {data.get('sex', 'N/A')}\n"
+            f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n\n"
+            f"  ADDRESS\n"
+            f"{'─' * 21}\n"
+            f"  Address     : {data.get('address', 'N/A')}\n\n"
+            f"  ID DETAILS\n"
+            f"{'─' * 21}\n"
+            f"  PhilHealth No : {data.get('philhealth_id_number', 'N/A')}\n\n"
+        )
+    def _format_tin(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("TIN/OCR", {})
+        return (
+            f"👤 PERSONAL INFORMATION\n"
+            f"{'─' * 21}\n"
+            f"  Name        : {data.get('name', 'N/A')}\n\n"
+            f"  ADDRESS\n"
+            f"{'─' * 21}\n"
+            f"  Address     : {data.get('address', 'N/A')}\n\n"
+            f"  ID DETAILS\n"
+            f"{'─' * 21}\n"
+            f"  TIN         : {data.get('tin', 'N/A')}\n"
+            f"  Birthday    : {data.get('date_of_birth', 'N/A')}\n"
+            f"  Date Issued : {data.get('date_issued', 'N/A')}\n\n"
+        )
+    def _format_senior_citizen(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("SeniorCitizen/OCR", {})
+        return (
+            f"👤 PERSONAL INFORMATION\n"
+            f"{'─' * 21}\n"
+            f"  Name          : {data.get('name', 'N/A')}\n"
+            f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n"
+            f"  Age           : {data.get('age', 'N/A')}\n\n"
+            f"  ADDRESS\n"
+            f"{'─' * 21}\n"
+            f"  Address       : {data.get('address', 'N/A')}\n\n"
+            f"  ID DETAILS\n"
+            f"{'─' * 21}\n"
+            f"  ID Number     : {data.get('id_number', 'N/A')}\n"
+            f"  Date Issued   : {data.get('date_of_issue', 'N/A')}\n"
+            f"  Issuing Office: {data.get('issuing_office', 'N/A')}\n\n"
+        )
+    def _format_sss(self, result: dict) -> str:
+        data = result.get("parsed", {}).get("SSS/OCR", {})
+        return (
+            f"👤 PERSONAL INFORMATION\n"
+            f"{'─' * 21}\n"
+            f"  Name          : {data.get('name', 'N/A')}\n"
+            f"  Date of Birth : {data.get('date_of_birth', 'N/A')}\n\n"
+            f"  ID DETAILS\n"
+            f"{'─' * 21}\n"
+            f"  SSS Number    : {data.get('sss_number', 'N/A')}\n\n"
+        )
 
     def validate_passport_result_sync(self, result: dict) -> bool:
         p = self.parent

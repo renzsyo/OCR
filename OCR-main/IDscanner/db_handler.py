@@ -12,31 +12,52 @@ CHANGES FROM PREVIOUS VERSION:
                              the local temp file is deleted after a successful upload
                              so no permanent local copies are kept
 """
-import time, os, threading
+import time, os, threading, sys
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+
+# --- FIX FOR EXE AND FOLDER PATHING ---
+def get_env_path():
+    # 1. Check if running as a PyInstaller EXE
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, ".env")
+
+    # 2. For PyCharm: Look in the same folder as this script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    potential_path = os.path.join(current_dir, ".env")
+
+    if os.path.exists(potential_path):
+        return potential_path
+
+    return ".env"  # Fallback to current working directory
+
+
+env_path = get_env_path()
+load_dotenv(dotenv_path=env_path)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BUCKET_NAME = "id-scans"
 
+# Define the global client variable
 _client = None
+# --------------------------------------
+
+if not SUPABASE_URL:
+    print(f"[DB] CRITICAL: SUPABASE_URL not found. Searched at: {os.path.abspath(env_path)}")
+
 
 def init_client_on_main_thread() -> None:
-    """
-    Call this once from the main thread at startup (before any background
-    threads run) so the Supabase/httpx/asyncio initialization never races
-    with PyTorch or PaddleOCR CUDA context on a background thread.
-    On Windows, initializing asyncio-based libraries from a worker thread
-    while CUDA is active can corrupt the process (0xC0000409).
-    """
     global _client
     if _client is not None:
         return
     try:
         from supabase import create_client
+        # Double check the vars right before init
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            raise ValueError("SUPABASE_URL or SUPABASE_KEY is missing from environment")
+
         _client = create_client(SUPABASE_URL, SUPABASE_KEY)
         print("[DB] Supabase client initialised.")
     except Exception as e:
@@ -109,11 +130,24 @@ def upload_image(
 
     try:
         filename     = os.path.basename(local_path)
-        _VALID_METHODS = {"Camera", "Upload", "PDF"}
-        method_key = method if method in _VALID_METHODS else "Upload"
-        method_folder = method_key
-        debug_method_folder = f"{method_key}_debug"
-        gradcam_method_folder = f"{method_key}_grad"
+        folder_map = {
+            "Camera": "Camera",
+            "Upload": "Upload",
+            "PDF": "PDF",
+        }
+        debug_folder_map = {
+            "Camera": "Camera_debug",
+            "Upload": "Upload_debug",
+            "PDF": "PDF_debug",
+        }
+        gradcam_folder_map = {
+            "Camera": "Camera_grad",
+            "Upload": "Upload_grad",
+            "PDF": "PDF_grad",
+        }
+        method_folder = folder_map.get(method, "Upload")
+        debug_method_folder = debug_folder_map.get(method, "Upload_debug")
+        gradcam_method_folder = gradcam_folder_map.get(method, "Upload_grad")
 
         if label in ("debug", "debug_back"):
             storage_path = f"Debug/{debug_method_folder}/{timestamp}_{label}_{filename}"

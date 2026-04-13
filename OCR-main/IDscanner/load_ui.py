@@ -1,37 +1,24 @@
-"""
-load_ui.py
-----------
-CHANGES FROM PREVIOUS VERSION:
-  - REMOVED [lines 29-36]:  radio button group (cameraOption, uploadOption,
-                             uploadPDFOption) — no longer in the UI
-  - REMOVED [lines 29-46]:  idOption dropdown delegate/placeholder setup removed;
-                             "Select Method" first item is disabled via HiddenFirstItem
-                             delegate instead
-  - CHANGED [line 22]:      UI filename changed from IDscanner.ui to
-                             IDscanner - Copy.ui
-  - CHANGED [lines 75-78]:  captureButtonp1 connects to camera.capture_image
-                             (slot now triggers auto-detection internally)
-  - ADDED   [lines 113-117]:uploadButtonp4 connection added (second upload button
-                             on single upload page)
-  - NOTE:                   ReuploadPDF is connected in main.py (after pdf_preview
-                             is assigned) — NOT here, as pdf_preview doesn't exist
-                             when UiLoader runs
-  - REMOVED [lines 137-142]:fileListWidget signal connections removed entirely
-                             (widget no longer exists on upload page)
-  - KEPT    [lines 55-74]:  all navigation button connections unchanged
-  - KEPT    [lines 80-136]: all other upload, download, debug connections unchanged
-"""
-
+import sys, os
 from PyQt6 import uic
 from PyQt6.QtCore import Qt
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import MainWindow
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # If we are running in PyCharm (not an EXE), just use the current folder
+        base_path = os.path.abspath(".")
 
+    return os.path.join(base_path, relative_path)
 
 class UiLoader:
     def __init__(self, parent: "MainWindow") -> None:
-        uic.loadUi("IDscanner\\IDscanner - Copy.ui", parent)
+        path_to_ui = get_resource_path("IDscanner/IDscanner-Copy-1.ui")
+        uic.loadUi(path_to_ui, parent)
         try:
             parent.Form1.setCurrentIndex(0)
         except Exception as e:
@@ -39,8 +26,6 @@ class UiLoader:
         self.connect_signals(parent)
 
     def connect_signals(self, p: "MainWindow") -> None:
-
-        # ── Method dropdown — disable the placeholder "Select Method" item ──
         try:
             from PyQt6.QtWidgets import QStyledItemDelegate
             from PyQt6.QtCore import QSize
@@ -82,12 +67,9 @@ class UiLoader:
                 print(f"[UiLoader] Failed to connect '{name}':", e)
 
         # ── Camera buttons ───────────────────────────────────────────────────
-        # captureButtonp1: single-cam page — triggers auto-detection
-        try:
-            p.captureButtonp1.clicked.connect(p.camera.capture_image)
-        except Exception as e:
-            print("[UiLoader] Failed to connect captureButtonp1:", e)
-
+        # captureButtonp1 removed from UI — capture is now triggered
+        # automatically by the auto-capture state machine in CamHandler.
+        # Only the recapture button remains on the single-cam page.
         try:
             p.recaptureButtonp1.clicked.connect(p.camera.recapture_image)
         except Exception as e:

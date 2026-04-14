@@ -1,21 +1,3 @@
-"""
-review_handler.py
------------------
-CHANGES FROM PREVIOUS VERSION:
-  - CHANGED [line 64]:      show_review_page() — selected_id now reads from
-                             detected_id_type (auto-detected) instead of
-                             p.idOption.currentText()
-  - REMOVED [lines 44-48]:  uploaded_files loop for tab display removed —
-                             passport upload now shows via p.front_file tab,
-                             consistent with NID/DL flow
-  - ADDED   [lines 76-113]: show_review_page() — after result text is populated,
-                             calls db_handler.save_scan() in a background thread
-                             to upload images to Supabase Storage and insert a
-                             record into the scans table; collects front/back paths
-                             from p.front_file, p.back_file, p._captured_front_save_path,
-                             p._captured_back_save_path; debug image found by
-                             checking standard filenames in working directory
-"""
 import os,cv2
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -128,8 +110,9 @@ class ReviewHandler:
             else:
                 print("[DEBUG] supabase not available, skipping")
 
-        # Single captured frame (passport camera flow)
-        if hasattr(p, "captured_frame"):
+
+        selected_id_for_tab = getattr(p, "lastIdType", None) or getattr(p, "detected_id_type", None)
+        if hasattr(p, "captured_frame") and selected_id_for_tab not in ("National ID", "UMID"):
             tab = ReviewHandler.frame_to_tab(p.captured_frame)
             p.reviewTabWidget.addTab(tab, "Captured Image")
 

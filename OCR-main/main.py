@@ -260,6 +260,7 @@ class MainWindow(QMainWindow):
 
 
         self.captured_front_frame = self.captured_frame.copy()
+        del self.captured_frame
 
         try:
             from PyQt6.QtGui import QImage, QPixmap
